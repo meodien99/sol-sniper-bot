@@ -49,7 +49,7 @@ export class RenouncedFreezeFilter implements IFilter {
       return { ok, message: ok ? undefined : `RenouncedFreeze -> Creator can ${messages.join(' and ')} tokens` };
 
     } catch (e) {
-      logger.error({ mint: poolKeysV4.baseMint }, `RenouncedFreeze -> Failed to check if creator can ${this.errorMessages.join(' and ')} tokens`,
+      logger.error({ mint: poolKeysV4.baseMint.toString() }, `RenouncedFreeze -> Failed to check if creator can ${this.errorMessages.join(' and ')} tokens`,
       );
     }
 

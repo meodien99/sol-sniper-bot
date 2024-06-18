@@ -57,7 +57,7 @@ export class MutableFilter implements IFilter {
         message: ok ? undefined : `MutableSocials -> Token ${messages.join(' and ')}`
       };
     } catch (e) {
-      logger.error({ mint: poolKeysV4.baseMint }, `MutableSocials -> Failed to check ${this.errorMessages.join(' and ')}`);
+      logger.error({ mint: poolKeysV4.baseMint.toString() }, `MutableSocials -> Failed to check ${this.errorMessages.join(' and ')}`);
     }
 
     return {

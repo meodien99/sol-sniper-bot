@@ -1,4 +1,4 @@
-import { Token, TokenAmountType } from "@raydium-io/raydium-sdk";
+import { Token, TokenAmount } from "@raydium-io/raydium-sdk";
 import { Keypair, PublicKey } from "@solana/web3.js";
 
 export interface IBotConfig {
@@ -6,10 +6,10 @@ export interface IBotConfig {
   checkRenounced: boolean;
   checkFreezable: boolean;
   checkBurn: boolean;
-  minPoolSize: TokenAmountType;
-  maxPoolSize: TokenAmountType;
+  minPoolSize: TokenAmount;
+  maxPoolSize: TokenAmount;
   quoteToken: Token;
-  quoteAmount: TokenAmountType;
+  quoteAmount: TokenAmount;
   quoteAta: PublicKey;
   oneTokenAtATime: boolean;
   autoSell: boolean;

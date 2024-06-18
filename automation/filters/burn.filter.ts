@@ -17,11 +17,11 @@ export class BurnFilter implements IFilter {
       };
     } catch (e: any) {
       if (e.code == BaseJSONRPCErrorCode.INVALID_PARAMS) {
-        logger.error({ mint: poolKeysV4.baseMint }, `Failed to check if LP: BaseJSONRPCErrorCode.INVALID_PARAMS`);
+        logger.error({ mint: poolKeysV4.baseMint.toString() }, `Failed to check if LP: BaseJSONRPCErrorCode.INVALID_PARAMS`);
         return { ok: true }; // auto pass
       }
 
-      logger.error({ mint: poolKeysV4.baseMint }, `Failed to check if LP is burned`);
+      logger.error({ mint: poolKeysV4.baseMint.toString() }, `Failed to check if LP is burned`);
     }
 
     return { ok: false, message: 'Failed to check if LP is burned' };

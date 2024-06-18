@@ -1,4 +1,4 @@
-import { LiquidityPoolKeysV4, Token, TokenAmount, TokenAmountType } from "@raydium-io/raydium-sdk";
+import { LiquidityPoolKeysV4, Token, TokenAmount, TokenAmount } from "@raydium-io/raydium-sdk";
 
 export interface IFilterResult {
   ok: boolean;
@@ -10,7 +10,7 @@ export interface IFilter {
 }
 
 export interface IPoolFilterArgs {
-  minPoolSize: TokenAmountType;
-  maxPoolSize: TokenAmountType;
+  minPoolSize: TokenAmount;
+  maxPoolSize: TokenAmount;
   quoteToken: Token;
 }
