@@ -4,32 +4,10 @@ import { IConfirmResponse, IExecutor } from "../types/executor.types";
 import { Currency, CurrencyAmount } from "@raydium-io/raydium-sdk";
 import { encode } from "bs58";
 import axios, { AxiosError } from "axios";
-
-// https://jito-foundation.gitbook.io/mev/mev-payment-and-distribution/on-chain-addresses
-const mainnet_jitoTipAccounts = [
-  "96gYZGLnJYVFmbjzopPSU6QiEV5fGqZNyN9nmNhvrZU5",
-  "HFqU5x63VTqvQss8hp11i4wVV8bD44PvwucfZ2bU7gRe",
-  "Cw8CFyM9FkoMi7K7Crf6HNQqf4uEMzpKw6QNghXLvLkY",
-  "ADaUMid9yfUytqMBgopwjb2DTLSokTSzL1zt6iGPaS49",
-  "DfXygSm4jCyNCybVYYK6DwvWqjKee8pbDmJGcLWNDXjh",
-  "ADuUkR4vqLUMWXxW9gh6D6L8pMSawimctcNZ5pGwDcEt",
-  "DttWaMuVvTiduZRnguLF7jNxTgiMBZ1hyAumKUiL2KRL",
-  "3AVi9Tg9Uo68tJfuvoKvqKNWKkC5wPdSSdeBnizKZ6jT"
-];
-
-const devnet_jitoTipAccounts = [
-  "B1mrQSpdeMU9gCvkJ6VsXVVoYjRGkNA7TtjMyqxrhecH",
-  "aTtUk2DHgLhKZRDjePq6eiHRKC1XXFMBiSUfQ2JNDbN",
-  "E2eSqe33tuhAHKTrwky5uEjaVqnb2T9ns6nHHUrN8588",
-  "4xgEmT58RwTNsF5xm2RMYCnR1EVukdK8a1i2qFjnJFu3",
-  "EoW3SUQap7ZeynXQ2QJ847aerhxbPVr843uMeTfc9dxM",
-  "ARTtviJkLLt6cHGQDydfo1Wyk6M4VGZdKZ2ZhdnJL336",
-  "9n3d1K5YD2vECAbRFhFFGYNNjiXtHXJWn9F31t89vsAV",
-  "9ttgPBBhRYFuQccdR1DSnb7hydsWANoDsV3P9kaGMCEh"
-]
+import { JITO_TIP_ACCOUNTS_DEVNET, JITO_TIP_ACCOUNTS_MAINNET } from "../configs";
 
 export class JitoExecutor implements IExecutor {
-  private _tipAccounts = isProduction() ? mainnet_jitoTipAccounts : devnet_jitoTipAccounts;
+  private _tipAccounts = isProduction() ? JITO_TIP_ACCOUNTS_MAINNET : JITO_TIP_ACCOUNTS_DEVNET;
   private _jitoFeeWallet: PublicKey;
 
   constructor(

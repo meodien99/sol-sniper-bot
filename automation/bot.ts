@@ -17,7 +17,8 @@ export class Bot {
   // one token at time
   private readonly mutex: Mutex;
   private sellExecutionCount = 0;
-  private readonly isJito: boolean = false;
+  
+  public readonly isJito: boolean = false;
 
   constructor(
     private readonly connection: Connection,

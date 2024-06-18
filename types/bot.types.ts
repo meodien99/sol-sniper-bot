@@ -5,7 +5,6 @@ export interface IBotConfig {
   wallet: Keypair;
   checkRenounced: boolean;
   checkFreezable: boolean;
-  checkBurn: boolean;
   minPoolSize: TokenAmount;
   maxPoolSize: TokenAmount;
   quoteToken: Token;
