@@ -1,5 +1,5 @@
 import { Connection } from "@solana/web3.js";
-import { IFilter, IPoolFilterArgs } from "./filter.types";
+import { IFilter, IPoolFilterArgs } from "../../types/filter.types";
 import { CHECK_IF_BURNED, CHECK_IF_FREEZABLE, CHECK_IF_MINT_IS_RENOUNCED, CHECK_IF_MUTABLE, CHECK_IF_SOCIALS } from "../../configs";
 import { BurnFilter } from "./burn.filter";
 import { RenouncedFreezeFilter } from "./renounced.filter";

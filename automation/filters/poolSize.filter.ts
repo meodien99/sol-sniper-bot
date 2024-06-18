@@ -1,5 +1,5 @@
 import { Connection } from "@solana/web3.js";
-import { IFilter, IFilterResult } from "./filter.types";
+import { IFilter, IFilterResult } from "../../types/filter.types";
 import { LiquidityPoolKeysV4, Token, TokenAmount, TokenAmountType } from "@raydium-io/raydium-sdk";
 import { logger } from "../../utils";
 

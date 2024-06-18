@@ -1,5 +1,5 @@
 import { Connection } from "@solana/web3.js";
-import { IFilter, IFilterResult } from "./filter.types";
+import { IFilter, IFilterResult } from "../../types/filter.types";
 import { MetadataAccountDataArgs } from "@metaplex-foundation/mpl-token-metadata";
 import { LiquidityPoolKeysV4, getPdaMetadataKey } from "@raydium-io/raydium-sdk";
 import { Serializer } from '@metaplex-foundation/umi/serializers';

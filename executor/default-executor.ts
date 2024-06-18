@@ -1,5 +1,5 @@
 import { BlockhashWithExpiryBlockHeight, Connection, Keypair, Transaction, VersionedTransaction } from "@solana/web3.js";
-import { IConfirmResponse, IExecutor } from "./executor.types";
+import { IConfirmResponse, IExecutor } from "../types/executor.types";
 import { logger } from "../utils";
 
 export class DefaultExecutor implements IExecutor {
