@@ -1,6 +1,6 @@
 import { BlockhashWithExpiryBlockHeight, Connection, Keypair, PublicKey, SystemProgram, TransactionMessage, VersionedTransaction } from "@solana/web3.js";
 import { isProduction, logger } from "../utils";
-import { IConfirmResponse, IExecutor } from "./types";
+import { IConfirmResponse, IExecutor } from "./executor.types";
 import { Currency, CurrencyAmount } from "@raydium-io/raydium-sdk";
 import { encode } from "bs58";
 import axios, { AxiosError } from "axios";
