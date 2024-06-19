@@ -79,7 +79,7 @@ export class Bot {
       const match = await this._filterMatch(poolKeys);
 
       if (!match) {
-        logger.trace({ mint: poolKeys.baseMint.toString() }, `Skipping buy because pool doesn't match filters`);
+        logger.debug({ mint: poolKeys.baseMint.toString() }, `Skipping buy because pool doesn't match filters`);
         return;
       }
 
