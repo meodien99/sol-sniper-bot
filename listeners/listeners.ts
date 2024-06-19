@@ -106,11 +106,11 @@ export class Listeners extends EventEmitter {
     };
 
     const filters: GetProgramAccountsFilter[] = [
-      { dataSize: 165 },
+      { dataSize: 165 },  //size of account (bytes)
       {
         memcmp: {
-          offset: 32,
-          bytes: config.walletPublicKey.toBase58(),
+          offset: 32, //location of our query in the account (bytes)
+          bytes: config.walletPublicKey.toBase58(), //our search criteria, a base58 encoded string
         }
       }
     ];

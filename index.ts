@@ -1,14 +1,15 @@
-import { Connection, Keypair } from "@solana/web3.js";
+import { Connection, KeyedAccountInfo, Keypair } from "@solana/web3.js";
 import { AUTO_BUY_DELAY, AUTO_SELL, AUTO_SELL_DELAY, BUY_SLIPPAGE, CACHE_NEW_MARKETS, CHECK_IF_BURNED, CHECK_IF_FREEZABLE, CHECK_IF_MINT_IS_RENOUNCED, COMMITMENT_LEVEL, COMPUTE_UNIT_LIMIT, COMPUTE_UNIT_PRICE, CONSECUTIVE_FILTER_MATCHES, CUSTOM_FEE, FILTER_CHECK_DURATION, FILTER_CHECK_INTERVAL, LOG_LEVEL, MAX_BUY_RETRIES, MAX_POOL_SIZE, MAX_SELL_RETRIES, MIN_POOL_SIZE, ONE_TOKEN_AT_A_TIME, PRE_LOAD_EXISTING_MARKETS, PRICE_CHECK_DURATION, PRICE_CHECK_INTERVAL, PRIVATE_KEY, QUOTE_AMOUNT, QUOTE_MINT, RPC_ENDPOINT, RPC_WEBSOCKET_ENDPOINT, SELL_SLIPPAGE, STOP_LOSS, TAKE_PROFIT, TRANSACTION_EXECUTOR } from "./configs";
 import { getWallet, isProduction, logger } from "./utils";
-import { Token, TokenAmount } from "@raydium-io/raydium-sdk";
+import { LIQUIDITY_STATE_LAYOUT_V4, MARKET_STATE_LAYOUT_V3, Token, TokenAmount } from "@raydium-io/raydium-sdk";
 import { Bot } from "./automation/bot";
 import { version } from './package.json';
 import { getToken } from "./utils/token";
 import { IBotConfig } from "./types/bot.types";
-import { getAssociatedTokenAddressSync } from "@solana/spl-token";
+import { AccountLayout, getAssociatedTokenAddressSync } from "@solana/spl-token";
 import { MarketCache, PoolCache } from "./caches";
-import { DefaultExecutor, IExecutor } from "./executor";
+import { DefaultExecutor, IExecutor, JitoExecutor } from "./executor";
+import { Listeners, OPEN_BOOK_SUBSCRIPTION_EVENT, POOL_SUBSCRIPTION_EVENT, WALLET_CHANGES_SUBSCRIPTION_EVENT } from "./listeners";
 
 function printDetails(wallet: Keypair, quoteToken: Token, bot: Bot) {
   logger.info(`Bot Version: ${version} `);
@@ -18,7 +19,7 @@ function printDetails(wallet: Keypair, quoteToken: Token, bot: Bot) {
   logger.info('------- CONFIGURATION START -------');
   logger.info(`Wallet: ${wallet.publicKey.toString()}`);
 
-  logger.info('- Bot -');
+  logger.info('- General Bot -');
 
   logger.info(
     `Using ${TRANSACTION_EXECUTOR} executer: ${bot.isJito || (TRANSACTION_EXECUTOR === 'default' ? true : false)}`,
@@ -102,9 +103,71 @@ const connection = new Connection(RPC_ENDPOINT, {
   commitment: COMMITMENT_LEVEL,
 });
 
-const marketCache = new MarketCache(connection);
-const poolCache = new PoolCache();
-let txExecutor: IExecutor = new DefaultExecutor(connection);
-const bot = new Bot(connection, marketCache, poolCache, txExecutor, botConfig);
-isProduction();
-printDetails(wallet, quoteToken, bot);
+const runListener = async () => {
+  logger.level = LOG_LEVEL;
+  logger.info('Starting bot ....');
+
+  const marketCache = new MarketCache(connection);
+  const poolCache = new PoolCache();
+  let txExecutor;
+
+  if (TRANSACTION_EXECUTOR === 'jito') {
+    txExecutor = new JitoExecutor(connection, CUSTOM_FEE);
+  } else {
+    txExecutor = new DefaultExecutor(connection)
+  }
+
+  const bot = new Bot(connection, marketCache, poolCache, txExecutor, botConfig);
+
+  const isValid = await bot.validate();
+
+  if (!isValid) {
+    logger.info('Bot is exiting...');
+    process.exit(1);
+  }
+
+  if (PRE_LOAD_EXISTING_MARKETS) {
+    await marketCache.init({ quoteToken });
+  }
+
+  const runTimestamp = Math.floor(new Date().getTime() / 1000);
+  const listeners = new Listeners(connection);
+
+  await listeners.start({
+    walletPublicKey: wallet.publicKey,
+    quoteToken,
+    autoSell: AUTO_SELL,
+    cacheNewMarkets: CACHE_NEW_MARKETS
+  });
+
+  listeners.on(OPEN_BOOK_SUBSCRIPTION_EVENT, (updatedAccountInfo: KeyedAccountInfo) => {
+    const marketState = MARKET_STATE_LAYOUT_V3.decode(updatedAccountInfo.accountInfo.data);
+    
+    marketCache.save(updatedAccountInfo.accountId.toString(), marketState);
+  });
+
+  listeners.on(POOL_SUBSCRIPTION_EVENT, async (updatedAccountInfo: KeyedAccountInfo) => {
+    const poolState = LIQUIDITY_STATE_LAYOUT_V4.decode(updatedAccountInfo.accountInfo.data);
+    const poolOpenTime = parseInt(poolState.poolOpenTime.toString());
+    const exists = await poolCache.get(poolState.baseMint.toBase58());
+
+    if (!exists && poolOpenTime > runTimestamp) {
+      poolCache.save(updatedAccountInfo.accountId.toString(), poolState);
+      await bot.buy(updatedAccountInfo.accountId, poolState);
+    }
+  });
+
+  listeners.on(WALLET_CHANGES_SUBSCRIPTION_EVENT, async (updatedAccountInfo: KeyedAccountInfo) => {
+    const accountData = AccountLayout.decode(updatedAccountInfo.accountInfo.data);
+
+    if (accountData.mint.equals(quoteToken.mint)) {
+      return;
+    }
+
+    await bot.sell(updatedAccountInfo.accountId, accountData);
+  });
+
+  printDetails(wallet, quoteToken, bot);
+}
+
+runListener();

@@ -17,7 +17,7 @@ export class Bot {
   // one token at time
   private readonly mutex: Mutex;
   private sellExecutionCount = 0;
-  
+
   public readonly isJito: boolean = false;
 
   constructor(
@@ -73,6 +73,15 @@ export class Bot {
       ]);
 
       const poolKeys: LiquidityPoolKeysV4 = createPoolKeys(accountId, poolState, market);
+
+      // filter match
+      // if(!useSnipeList)
+      const match = await this._filterMatch(poolKeys);
+
+      if (!match) {
+        logger.trace({ mint: poolKeys.baseMint.toString() }, `Skipping buy because pool doesn't match filters`);
+        return;
+      }
 
       for (let i = 0; i < this.config.maxBuyRetries; i++) {
         try {
@@ -184,7 +193,7 @@ export class Bot {
             'sell'
           );
 
-          if(result.confirmed) {
+          if (result.confirmed) {
             logger.info(
               {
                 dex: `https://dexscreener.com/solana/${rawAccount.mint.toString()}?maker=${this.config.wallet.publicKey}`,
@@ -205,17 +214,51 @@ export class Bot {
             },
             `Error confirming sell tx`,
           );
-        } catch(e) {
+        } catch (e) {
           logger.debug({ mint: rawAccount.mint.toString(), e }, `Error confirming sell transaction`);
         }
       }
     } catch (e) {
       logger.error({ mint: rawAccount.mint.toString(), e }, `Failed to sell token`);
     } finally {
-      if(this.config.oneTokenAtATime) {
+      if (this.config.oneTokenAtATime) {
         this.sellExecutionCount--;
       }
     }
+  }
+
+  private async _filterMatch(poolKeys: LiquidityPoolKeysV4): Promise<boolean> {
+    if (this.config.filterCheckDuration === 0 || this.config.filterCheckInterval === 0) {
+      return true;
+    }
+
+    const timesToCheck = this.config.filterCheckDuration / this.config.filterCheckInterval;
+    let timesChecked = 0;
+    let matchCount = 0;
+
+    do {
+      try {
+        const shouldBuy = await this.poolFilters.execute(poolKeys);
+
+        if (shouldBuy) {
+          matchCount++;
+
+          if (this.config.consecutiveMatchCount <= matchCount) {
+            logger.debug({ mint: poolKeys.baseMint.toString() }, `Filter match ${matchCount}/${this.config.consecutiveMatchCount}`);
+            return true;
+          }
+        } else {
+          matchCount = 0;
+        }
+
+        await sleep(this.config.filterCheckInterval);
+      } catch (e) {
+      } finally {
+        timesChecked++;
+      }
+    } while (timesChecked < timesToCheck);
+
+    return false;
   }
 
   private async _priceMatch(amountIn: TokenAmount, poolKeys: LiquidityPoolKeysV4) {
@@ -251,17 +294,16 @@ export class Bot {
           slippage
         }).amountOut;
 
-        logger.debug(
-          { mint: poolKeys.baseMint.toString() },
-          `Take profit: ${takeProfit.toFixed()} | Stop loss: ${stopLoss.toFixed()} | Current: ${amountOut.toFixed()}`,
-        );
-
-        if(amountOut.lt(stopLoss) || amountOut.gt(takeProfit)) {
+        if (amountOut.lt(stopLoss) || amountOut.gt(takeProfit)) {
+          logger.debug(
+            { mint: poolKeys.baseMint.toString() },
+            `Prepare a sell for Taking profit at: ${takeProfit.toFixed()} | Stop loss: ${stopLoss.toFixed()} | Current: ${amountOut.toFixed()}`,
+          );
           break;
         }
 
         await sleep(this.config.priceCheckInterval);
-      } catch(e) {
+      } catch (e) {
         logger.error({ mint: poolKeys.baseMint.toString(), e }, `Failed to check token price`);
       } finally {
         timesChecked++;
@@ -296,6 +338,7 @@ export class Bot {
     });
 
     const lastestBlockHash = await this.connection.getLatestBlockhash();
+    
     const { innerTransaction } = Liquidity.makeSwapFixedInInstruction({
       amountIn: amountIn.raw,
       minAmountOut: computedAmountOut.minAmountOut.raw,

@@ -1,4 +1,4 @@
-import { LiquidityPoolKeysV4, Token, TokenAmount, TokenAmount } from "@raydium-io/raydium-sdk";
+import { LiquidityPoolKeysV4, Token, TokenAmount } from "@raydium-io/raydium-sdk";
 
 export interface IFilterResult {
   ok: boolean;

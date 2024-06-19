@@ -39,9 +39,9 @@ export class PoolFilters {
     const pass = results.every(r => r.ok);
 
     if (!pass) {
-      for (const result of results.filter((r) => !r.ok && !!r.message)) {
-        logger.trace(result.message);
-      }
+      // for (const result of results.filter((r) => !r.ok && !!r.message)) {
+      //   logger.trace(result.message);
+      // }
 
       return false;
     }
