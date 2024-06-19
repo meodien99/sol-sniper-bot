@@ -1,4 +1,4 @@
-import { Liquidity, LiquidityPoolKeys, LiquidityStateV4, MAINNET_PROGRAM_ID, Market, jsonInfo2PoolKeys } from "@raydium-io/raydium-sdk";
+import { Liquidity, LiquidityPoolKeys, LiquidityStateV4, MAINNET_PROGRAM_ID, Market } from "@raydium-io/raydium-sdk";
 import { PublicKey } from "@solana/web3.js";
 import { MinimalMarketLayoutV3 } from "./market";
 
@@ -7,7 +7,7 @@ export function createPoolKeys(
   accountData: LiquidityStateV4,
   minimalMarketLayoutV3: MinimalMarketLayoutV3
 ): LiquidityPoolKeys {
-  return jsonInfo2PoolKeys({
+  return {
     id,
     baseMint: accountData.baseMint,
     quoteMint: accountData.quoteMint,
@@ -44,5 +44,5 @@ export function createPoolKeys(
     withdrawQueue: accountData.withdrawQueue,
     lpVault: accountData.lpVault,
     lookupTableAccount: PublicKey.default,
-  })
+  }
 }
