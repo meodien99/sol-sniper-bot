@@ -1,6 +1,14 @@
-import { Liquidity, LiquidityPoolKeys, LiquidityStateV4, MAINNET_PROGRAM_ID, Market } from "@raydium-io/raydium-sdk";
+import { Liquidity, LiquidityPoolKeys, LiquidityPoolStatus, LiquidityStateV4, MAINNET_PROGRAM_ID, Market } from "@raydium-io/raydium-sdk";
 import { PublicKey } from "@solana/web3.js";
 import { MinimalMarketLayoutV3 } from "./market";
+import bs58 from 'bs58';
+
+export function poolStatusToBytes(status: LiquidityPoolStatus): string {
+  const buffer = new ArrayBuffer(8);
+  new DataView(buffer).setUint32(0, status, true);
+
+  return bs58.encode(Array.from(new Uint8Array(buffer)));
+}
 
 export function createPoolKeys(
   id: PublicKey,

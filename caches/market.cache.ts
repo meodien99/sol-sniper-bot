@@ -44,12 +44,10 @@ export class MarketCache {
     }
   }
 
-  public async get(marketId: string): Promise<MinimalMarketLayoutV3> {
+  public async getOrSet(marketId: string): Promise<MinimalMarketLayoutV3> {
     if(this.keys.has(marketId)) {
       return this.keys.get(marketId)!;
     }
-
-    logger.trace({}, `Fetching new market keys for ${marketId}`);
     
     const market = await this._fetch(marketId);
     this.keys.set(marketId, market);

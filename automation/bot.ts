@@ -66,22 +66,25 @@ export class Bot {
       await this.mutex.acquire();
     }
 
+    const match = await this._filterMatch(poolState);
+
+    if (!match) {
+      logger.debug({ mint: poolState.baseMint.toString() }, `Skipping buy because pool doesn't match filters`);
+
+      // unlock mutex
+      this.mutex.release();
+      
+      return;
+    }
+    
+    
     try {
       const [market, mintATA] = await Promise.all([
-        this.marketCache.get(poolState.marketId.toString()),
+        this.marketCache.getOrSet(poolState.marketId.toString()),
         getAssociatedTokenAddress(poolState.baseMint, this.config.wallet.publicKey)
       ]);
 
       const poolKeys: LiquidityPoolKeysV4 = createPoolKeys(accountId, poolState, market);
-
-      // filter match
-      // if(!useSnipeList)
-      const match = await this._filterMatch(poolKeys);
-
-      if (!match) {
-        logger.debug({ mint: poolKeys.baseMint.toString() }, `Skipping buy because pool doesn't match filters`);
-        return;
-      }
 
       for (let i = 0; i < this.config.maxBuyRetries; i++) {
         try {
@@ -108,7 +111,7 @@ export class Bot {
               {
                 mint: poolState.baseMint.toString(),
                 signature: result.signature,
-                url: `https://solscan.io/tx/${result.signature}?cluster=${NETWORK}`,
+                url: `https://solscan.io/tx/${result.signature}`,
               },
               `Confirmed to buy tx`,
             );
@@ -165,7 +168,7 @@ export class Bot {
         await sleep(this.config.autoSellDelay);
       }
 
-      const market = await this.marketCache.get(poolData.state.marketId.toString());
+      const market = await this.marketCache.getOrSet(poolData.state.marketId.toString());
       const poolKeys: LiquidityPoolKeysV4 = createPoolKeys(
         new PublicKey(poolData.id),
         poolData.state,
@@ -199,7 +202,7 @@ export class Bot {
                 dex: `https://dexscreener.com/solana/${rawAccount.mint.toString()}?maker=${this.config.wallet.publicKey}`,
                 mint: rawAccount.mint.toString(),
                 signature: result.signature,
-                url: `https://solscan.io/tx/${result.signature}?cluster=${NETWORK}`,
+                url: `https://solscan.io/tx/${result.signature}`,
               },
               `Confirmed sell tx`,
             );
@@ -227,36 +230,13 @@ export class Bot {
     }
   }
 
-  private async _filterMatch(poolKeys: LiquidityPoolKeysV4): Promise<boolean> {
-    if (this.config.filterCheckDuration === 0 || this.config.filterCheckInterval === 0) {
-      return true;
+  private async _filterMatch(poolState: LiquidityStateV4): Promise<boolean> {
+    try {
+      const shouldBuy = await this.poolFilters.execute(poolState);
+      
+      return shouldBuy;
+    } catch (e) {
     }
-
-    const timesToCheck = this.config.filterCheckDuration / this.config.filterCheckInterval;
-    let timesChecked = 0;
-    let matchCount = 0;
-
-    do {
-      try {
-        const shouldBuy = await this.poolFilters.execute(poolKeys);
-
-        if (shouldBuy) {
-          matchCount++;
-
-          if (this.config.consecutiveMatchCount <= matchCount) {
-            logger.debug({ mint: poolKeys.baseMint.toString() }, `Filter match ${matchCount}/${this.config.consecutiveMatchCount}`);
-            return true;
-          }
-        } else {
-          matchCount = 0;
-        }
-
-        await sleep(this.config.filterCheckInterval);
-      } catch (e) {
-      } finally {
-        timesChecked++;
-      }
-    } while (timesChecked < timesToCheck);
 
     return false;
   }
@@ -286,13 +266,13 @@ export class Bot {
           poolKeys
         });
 
-        const amountOut = Liquidity.computeAmountOut({
+        const { amountOut, currentPrice } = Liquidity.computeAmountOut({
           poolKeys,
           poolInfo,
           amountIn,
           currencyOut: this.config.quoteToken,
           slippage
-        }).amountOut;
+        });
 
         if (amountOut.lt(stopLoss) || amountOut.gt(takeProfit)) {
           logger.debug(
@@ -338,7 +318,7 @@ export class Bot {
     });
 
     const lastestBlockHash = await this.connection.getLatestBlockhash();
-    
+
     const { innerTransaction } = Liquidity.makeSwapFixedInInstruction({
       amountIn: amountIn.raw,
       minAmountOut: computedAmountOut.minAmountOut.raw,

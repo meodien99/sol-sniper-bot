@@ -3,8 +3,6 @@ import { Keypair, PublicKey } from "@solana/web3.js";
 
 export interface IBotConfig {
   wallet: Keypair;
-  checkRenounced: boolean;
-  checkFreezable: boolean;
   minPoolSize: TokenAmount;
   maxPoolSize: TokenAmount;
   quoteToken: Token;
@@ -24,7 +22,4 @@ export interface IBotConfig {
   sellSlippage: number;
   priceCheckInterval: number;
   priceCheckDuration: number;
-  filterCheckInterval: number;
-  filterCheckDuration: number;
-  consecutiveMatchCount: number;
 }

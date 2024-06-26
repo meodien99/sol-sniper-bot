@@ -1,9 +1,9 @@
-import { LIQUIDITY_STATE_LAYOUT_V4, MAINNET_PROGRAM_ID, MARKET_STATE_LAYOUT_V3, Token } from "@raydium-io/raydium-sdk";
+import { LIQUIDITY_STATE_LAYOUT_V4, LiquidityPoolStatus, MAINNET_PROGRAM_ID, MARKET_STATE_LAYOUT_V3, SPL_ACCOUNT_LAYOUT, SPL_MINT_LAYOUT, Token } from "@raydium-io/raydium-sdk";
 import { Connection, GetProgramAccountsFilter, ProgramAccountChangeCallback, PublicKey } from "@solana/web3.js";
 import EventEmitter from "events";
 import { OPEN_BOOK_SUBSCRIPTION_EVENT, POOL_SUBSCRIPTION_EVENT, WALLET_CHANGES_SUBSCRIPTION_EVENT } from "./listeners.events";
-import bs58 from 'bs58';
 import { TOKEN_PROGRAM_ID } from "@solana/spl-token";
+import { poolStatusToBytes } from "../utils/pool";
 
 export interface IListenersStartConfig {
   walletPublicKey: PublicKey;
@@ -28,14 +28,14 @@ export class Listeners extends EventEmitter {
     const raydiumSubscription = await this._subscribeToRaydiumPools(config);
     this.subcriptions.push(raydiumSubscription);
 
-    if(config.autoSell) {
+    if (config.autoSell) {
       const walletSubscription = await this._subscribeToWalletChanges(config);
       this.subcriptions.push(walletSubscription);
     }
   }
 
   public async stop() {
-    for(let i = this.subcriptions.length; i >= 0; --i) {
+    for (let i = this.subcriptions.length; i >= 0; --i) {
       const subcription = this.subcriptions[i];
       await this.connection.removeAccountChangeListener(subcription);
       this.subcriptions.splice(i, 1);
@@ -69,7 +69,7 @@ export class Listeners extends EventEmitter {
     const callback: ProgramAccountChangeCallback = async (updatedAccountInfo) => {
       this.emit(POOL_SUBSCRIPTION_EVENT, updatedAccountInfo)
     };
-
+   
     const filters: GetProgramAccountsFilter[] = [
       { dataSize: LIQUIDITY_STATE_LAYOUT_V4.span },
       {
@@ -87,7 +87,7 @@ export class Listeners extends EventEmitter {
       {
         memcmp: {
           offset: LIQUIDITY_STATE_LAYOUT_V4.offsetOf('status'),
-          bytes: bs58.encode([6, 0, 0, 0, 0, 0, 0, 0]),
+          bytes: poolStatusToBytes(LiquidityPoolStatus.Swap),
         },
       },
     ];

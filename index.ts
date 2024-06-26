@@ -1,6 +1,6 @@
 import { Connection, KeyedAccountInfo, Keypair } from "@solana/web3.js";
-import { AUTO_BUY_DELAY, AUTO_SELL, AUTO_SELL_DELAY, BUY_SLIPPAGE, CACHE_NEW_MARKETS, CHECK_IF_BURNED, CHECK_IF_FREEZABLE, CHECK_IF_MINT_IS_RENOUNCED, COMMITMENT_LEVEL, COMPUTE_UNIT_LIMIT, COMPUTE_UNIT_PRICE, CONSECUTIVE_FILTER_MATCHES, CUSTOM_FEE, FILTER_CHECK_DURATION, FILTER_CHECK_INTERVAL, LOG_LEVEL, MAX_BUY_RETRIES, MAX_POOL_SIZE, MAX_SELL_RETRIES, MIN_POOL_SIZE, ONE_TOKEN_AT_A_TIME, PRE_LOAD_EXISTING_MARKETS, PRICE_CHECK_DURATION, PRICE_CHECK_INTERVAL, PRIVATE_KEY, QUOTE_AMOUNT, QUOTE_MINT, RPC_ENDPOINT, RPC_WEBSOCKET_ENDPOINT, SELL_SLIPPAGE, STOP_LOSS, TAKE_PROFIT, TRANSACTION_EXECUTOR } from "./configs";
-import { getWallet, isProduction, logger } from "./utils";
+import { AUTO_BUY_DELAY, AUTO_SELL, AUTO_SELL_DELAY, BUY_SLIPPAGE, CACHE_NEW_MARKETS, CHECK_IF_BURNED, CHECK_IF_FREEZABLE, CHECK_IF_MINT_IS_RENOUNCED, COMMITMENT_LEVEL, COMPUTE_UNIT_LIMIT, COMPUTE_UNIT_PRICE, CUSTOM_FEE, LOG_LEVEL, MAX_BUY_RETRIES, MAX_POOL_SIZE, MAX_SELL_RETRIES, MIN_LP_BURNED_PERCENT, MIN_POOL_SIZE, ONE_TOKEN_AT_A_TIME, PRE_LOAD_EXISTING_MARKETS, PRICE_CHECK_DURATION, PRICE_CHECK_INTERVAL, PRIVATE_KEY, QUOTE_AMOUNT, QUOTE_MINT, RPC_ENDPOINT, RPC_WEBSOCKET_ENDPOINT, SELL_SLIPPAGE, STOP_LOSS, TAKE_PROFIT, TRANSACTION_EXECUTOR } from "./configs";
+import { getWallet, logger } from "./utils";
 import { LIQUIDITY_STATE_LAYOUT_V4, MARKET_STATE_LAYOUT_V3, Token, TokenAmount } from "@raydium-io/raydium-sdk";
 import { Bot } from "./automation/bot";
 import { version } from './package.json';
@@ -8,7 +8,7 @@ import { getToken } from "./utils/token";
 import { IBotConfig } from "./types/bot.types";
 import { AccountLayout, getAssociatedTokenAddressSync } from "@solana/spl-token";
 import { MarketCache, PoolCache } from "./caches";
-import { DefaultExecutor, IExecutor, JitoExecutor } from "./executor";
+import { DefaultExecutor, JitoExecutor } from "./executor";
 import { Listeners, OPEN_BOOK_SUBSCRIPTION_EVENT, POOL_SUBSCRIPTION_EVENT, WALLET_CHANGES_SUBSCRIPTION_EVENT } from "./listeners";
 
 function printDetails(wallet: Keypair, quoteToken: Token, bot: Bot) {
@@ -54,11 +54,10 @@ function printDetails(wallet: Keypair, quoteToken: Token, bot: Bot) {
   logger.info(`Stop loss: ${botConfig.stopLoss}%`);
 
   logger.info('- Filters -');
-  logger.info(`Filter check interval: ${botConfig.filterCheckInterval} ms`);
-  logger.info(`Filter check duration: ${botConfig.filterCheckDuration} ms`);
-  logger.info(`Consecutive filter matches: ${botConfig.consecutiveMatchCount}`);
-  logger.info(`Check renounced: ${botConfig.checkRenounced}`);
-  logger.info(`Check freezable: ${botConfig.checkFreezable}`);
+  logger.info(`Check renounced: ${CHECK_IF_MINT_IS_RENOUNCED}`);
+  logger.info(`Check freezable: ${CHECK_IF_FREEZABLE}`);
+  logger.info(`Check burned: ${CHECK_IF_BURNED}`);
+  logger.info(`Min LP Burned percent: ${MIN_LP_BURNED_PERCENT}%`);
   logger.info(`Min pool size: ${botConfig.minPoolSize.toFixed()}`);
   logger.info(`Max pool size: ${botConfig.maxPoolSize.toFixed()}`);
 
@@ -73,8 +72,6 @@ const quoteToken = getToken(QUOTE_MINT);
 const botConfig: IBotConfig = {
   wallet,
   quoteAta: getAssociatedTokenAddressSync(quoteToken.mint, wallet.publicKey),
-  checkRenounced: CHECK_IF_MINT_IS_RENOUNCED,
-  checkFreezable: CHECK_IF_FREEZABLE,
   minPoolSize: new TokenAmount(quoteToken, MIN_POOL_SIZE, false),
   maxPoolSize: new TokenAmount(quoteToken, MAX_POOL_SIZE, false),
   quoteToken,
@@ -93,9 +90,6 @@ const botConfig: IBotConfig = {
   sellSlippage: SELL_SLIPPAGE,
   priceCheckInterval: PRICE_CHECK_INTERVAL,
   priceCheckDuration: PRICE_CHECK_DURATION,
-  filterCheckInterval: FILTER_CHECK_INTERVAL,
-  filterCheckDuration: FILTER_CHECK_DURATION,
-  consecutiveMatchCount: CONSECUTIVE_FILTER_MATCHES,
 };
 
 const connection = new Connection(RPC_ENDPOINT, {
@@ -142,18 +136,31 @@ const runListener = async () => {
 
   listeners.on(OPEN_BOOK_SUBSCRIPTION_EVENT, (updatedAccountInfo: KeyedAccountInfo) => {
     const marketState = MARKET_STATE_LAYOUT_V3.decode(updatedAccountInfo.accountInfo.data);
-    
-    marketCache.save(updatedAccountInfo.accountId.toString(), marketState);
+
+    const marketId = updatedAccountInfo.accountId.toString();
+    marketCache.save(marketId, marketState);
   });
+
+  // const testFilters = new PoolFilters(connection, {
+  //   quoteToken: quoteToken,
+  //   minPoolSize: botConfig.minPoolSize,
+  //   maxPoolSize: botConfig.maxPoolSize
+  // });
 
   listeners.on(POOL_SUBSCRIPTION_EVENT, async (updatedAccountInfo: KeyedAccountInfo) => {
     const poolState = LIQUIDITY_STATE_LAYOUT_V4.decode(updatedAccountInfo.accountInfo.data);
     const poolOpenTime = parseInt(poolState.poolOpenTime.toString());
     const exists = await poolCache.get(poolState.baseMint.toBase58());
 
+
     if (!exists && poolOpenTime > runTimestamp) {
       poolCache.save(updatedAccountInfo.accountId.toString(), poolState);
       await bot.buy(updatedAccountInfo.accountId, poolState);
+
+      // const shouldBuy = await testFilters.execute(poolState);
+      // if (shouldBuy) {
+      //   logger.info({ mint: poolState.baseMint.toBase58() }, 'matched pool');
+      // }
     }
   });
 
