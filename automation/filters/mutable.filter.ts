@@ -1,9 +1,10 @@
 import { Connection } from "@solana/web3.js";
-import { IFilter, IFilterResult } from "../../types/filter.types";
+import { IFilter } from "../../types/filter.types";
 import { MetadataAccountDataArgs } from "@metaplex-foundation/mpl-token-metadata";
-import { LiquidityPoolKeysV4, getPdaMetadataKey } from "@raydium-io/raydium-sdk";
+import { LiquidityState, getPdaMetadataKey } from "@raydium-io/raydium-sdk";
 import { Serializer } from '@metaplex-foundation/umi/serializers';
 import { logger } from "../../utils";
+import { CHECK_IF_MUTABLE, CHECK_IF_SOCIALS } from "../../configs";
 
 export class MutableFilter implements IFilter {
   private readonly errorMessages: string[] = [];
@@ -11,62 +12,48 @@ export class MutableFilter implements IFilter {
   constructor(
     private readonly connection: Connection,
     private readonly metadataSerializer: Serializer<MetadataAccountDataArgs, MetadataAccountDataArgs>,
-    private readonly checkMutable: boolean,
-    private readonly checkSocials: boolean
-  ) {
-    if (this.checkMutable) {
-      this.errorMessages.push('mutable');
-    }
+  ) { }
 
-    if (this.checkSocials) {
-      this.errorMessages.push('socials');
-    }
-  }
-
-  async execute(poolKeysV4: LiquidityPoolKeysV4): Promise<IFilterResult> {
+  async execute(poolState: LiquidityState): Promise<boolean> {
     try {
       // Program derived Address metadata
-      const metadataPDA = getPdaMetadataKey(poolKeysV4.baseMint);
+      const metadataPDA = getPdaMetadataKey(poolState.baseMint);
       const metadataAccount = await this.connection.getAccountInfo(metadataPDA.publicKey, this.connection.commitment);
 
       if (!metadataAccount?.data) {
-        return {
-          ok: false,
-          message: 'Mutable -> Failed to fetch account metadata'
-        };
+        // logger.error({ mint: poolState.baseMint.toString() }, 'Mutable -> Failed to fetch account metadata');
+        return false;
       }
 
       const [metadataAccountDataArgs] = this.metadataSerializer.deserialize(metadataAccount.data);
 
-      const mutable = !this.checkMutable || metadataAccountDataArgs.isMutable;
-      const hasSocials = !this.checkSocials || (await this.hasSocials(metadataAccountDataArgs));
+      const tests = [];
 
-      const ok = !mutable && hasSocials;
-      const messages: string[] = [];
+      if (CHECK_IF_MUTABLE) {
+        const mutable = metadataAccountDataArgs.isMutable;
 
-      if (mutable) {
-        messages.push('metadata can be changed');
+        tests.push(mutable);
       }
 
-      if (!hasSocials) {
-        messages.push('no socials found');
+      if(CHECK_IF_SOCIALS) {
+        const hasSocials = await this.hasSocials(metadataAccountDataArgs);
+
+        tests.push(hasSocials);
       }
 
-      return {
-        ok,
-        message: ok ? undefined : `MutableSocials -> Token ${messages.join(' and ')}`
-      };
+      return tests.every((passed) => passed === true);
     } catch (e) {
-      logger.error({ mint: poolKeysV4.baseMint.toString() }, `MutableSocials -> Failed to check ${this.errorMessages.join(' and ')}`);
+      logger.error({ mint: poolState.baseMint.toString() }, `MutableFilter -> Failed to check metadata`);
     }
 
-    return {
-      ok: false,
-      message: `MutableSocials -> Failed to check ${this.errorMessages.join(' and ')}`
-    }
+    return false;
   }
 
   private async hasSocials(metadata: MetadataAccountDataArgs): Promise<boolean> {
+    if(!metadata.uri) {
+      return false;
+    }
+    
     const response = await fetch(metadata.uri);
     const data = await response.json();
 

@@ -1,5 +1,4 @@
-export * from './burn.filter';
 export * from './mutable.filter';
 export * from './pool.filters';
-export * from './renounced.filter';
+export * from './authority.filters';
 export * from './poolSize.filter';

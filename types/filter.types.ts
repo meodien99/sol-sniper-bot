@@ -1,12 +1,7 @@
-import { LiquidityPoolKeysV4, Token, TokenAmount } from "@raydium-io/raydium-sdk";
-
-export interface IFilterResult {
-  ok: boolean;
-  message?: string;
-}
+import { LiquidityStateV4, Token, TokenAmount } from "@raydium-io/raydium-sdk";
 
 export interface IFilter {
-  execute(poolKeysV4: LiquidityPoolKeysV4): Promise<IFilterResult>
+  execute(poolKeysV4: LiquidityStateV4): Promise<boolean>
 }
 
 export interface IPoolFilterArgs {

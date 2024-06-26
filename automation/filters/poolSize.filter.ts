@@ -1,6 +1,6 @@
 import { Connection } from "@solana/web3.js";
-import { IFilter, IFilterResult } from "../../types/filter.types";
-import { LiquidityPoolKeysV4, Token, TokenAmount } from "@raydium-io/raydium-sdk";
+import { IFilter } from "../../types/filter.types";
+import { LiquidityStateV4, Token, TokenAmount } from "@raydium-io/raydium-sdk";
 import { logger } from "../../utils";
 
 export class PoolSizeFilter implements IFilter {
@@ -11,9 +11,9 @@ export class PoolSizeFilter implements IFilter {
     private readonly maxPoolSize: TokenAmount,
   ) { }
 
-  async execute(poolKeysV4: LiquidityPoolKeysV4): Promise<IFilterResult> {
+  async execute(poolState: LiquidityStateV4): Promise<boolean> {
     try {
-      const response = await this.connection.getTokenAccountBalance(poolKeysV4.quoteVault, this.connection.commitment);
+      const response = await this.connection.getTokenAccountBalance(poolState.quoteVault, this.connection.commitment);
       const poolSize = new TokenAmount(this.quoteToken, response.value.amount, true);
       let isInRange = true;
 
@@ -21,10 +21,8 @@ export class PoolSizeFilter implements IFilter {
         isInRange = poolSize.raw.lte(this.maxPoolSize.raw);
 
         if (!isInRange) {
-          return {
-            ok: false,
-            message: `PoolSize -> Pool size ${poolSize.toFixed()} > Max Pool Size ${this.maxPoolSize.toFixed()}`
-          }
+          // logger.error({ mint: poolState.baseMint.toString() }, `PoolSize -> Pool size ${poolSize.toFixed()} > Max Pool Size ${this.maxPoolSize.toFixed()}`);
+          return false;
         }
       }
 
@@ -32,23 +30,16 @@ export class PoolSizeFilter implements IFilter {
         isInRange = poolSize.raw.gte(this.minPoolSize.raw);
 
         if (!isInRange) {
-          return {
-            ok: false,
-            message: `PoolSize -> Pool size ${poolSize.toFixed()} < Min Pool Size ${this.minPoolSize.toFixed()}`
-          }
+          // logger.error({ mint: poolState.baseMint.toString() }, `PoolSize -> Pool size ${poolSize.toFixed()} < Min Pool Size ${this.minPoolSize.toFixed()}`);
+          return false;
         }
       }
 
-      return {
-        ok: isInRange
-      }
+      return isInRange;
     } catch (e) {
-      logger.error({ mint: poolKeysV4.baseMint.toString() }, `Failed to check pool size`)
+      logger.error({ mint: poolState.baseMint.toString() }, `Failed to check pool size`)
     }
 
-    return {
-      ok: false,
-      message: `Failed to check pool size`
-    }
+    return false;
   }
 }
