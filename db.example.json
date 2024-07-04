@@ -1,0 +1,8 @@
+{
+    "markets": {
+    "<marketId-in-base58>": "<baseMint address>"
+  },
+    "ignored": {
+    "<id-in-uuidv4>": "<baseMint address>"
+  }
+}
