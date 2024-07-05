@@ -1,0 +1,10 @@
+{
+    "markets": {
+    "<baseMint>": {
+      "baseMint": "<baseMint>"
+    }
+  },
+    "ignored": {
+      "<uuid>": "<mint>"
+  }
+}

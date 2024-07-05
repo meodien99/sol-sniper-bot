@@ -5,12 +5,13 @@ import { v4 as uuidv4 } from 'uuid';
 import _get from 'lodash.get';
 import _set from 'lodash.set';
 import _omit from 'lodash.omit';
+import { DBCollection, DBItem, DBStructures, DBValueSet, DBValueSets } from './db.types';
 
 const emptyStringObject = JSON.stringify({});
 
 export class DB extends EventEmitter {
   private path: string;
-  private storage: Record<string, any> = {};
+  private storage: DBStructures = {};
 
   constructor(path: string) {
     super();
@@ -46,7 +47,7 @@ export class DB extends EventEmitter {
    *  }
    * }
    */
-  public async set(collection: string, value: any, _id?: string): Promise<void> {
+  public async set<T extends keyof DBValueSets>(collection: DBCollection, value: DBValueSet<T>, _id?: string): Promise<void> {
     try {
       if (typeof collection !== "string") {
         throw new TypeError("Collection should be a string");
@@ -62,7 +63,7 @@ export class DB extends EventEmitter {
     }
   }
 
-  public async delete(collection: string, _id: string): Promise<void> {
+  public async delete(collection: DBCollection, _id: string): Promise<void> {
     const orignal = await this.get(collection);
     const omitted = _omit(orignal, [_id]);
 
@@ -104,13 +105,13 @@ export class DB extends EventEmitter {
    * 
    * DB.get('a', <uuid1>) // => { name: 'Name' } 
    */
-  public async get(collection: string, _id?: string): Promise<any> {
+  public async get<T extends keyof DBStructures>(collection: DBCollection, _id?: string): Promise<DBItem<T> | DBValueSet<T> | undefined> {
     try {
       if (typeof collection !== "string") {
         throw new TypeError("Collection should be a string");
       }
 
-      const path = [collection];
+      const path: string[] = [collection];
 
       if (_id) {
         path.push(_id);
@@ -160,7 +161,7 @@ export class DB extends EventEmitter {
    * DB.getPrimaryIdByKey('a', 'Name 2');
    * // => <uuid2>
    */
-  public async getPrimaryIdByValueNKey(collection: string, value: any, key?: string,): Promise<string | undefined> {
+  public async getPrimaryIdByValueNKey(collection: DBCollection, value: any, key?: string,): Promise<string | undefined> {
     try {
       if (typeof collection !== "string") {
         throw new TypeError("Collection should be a string");
