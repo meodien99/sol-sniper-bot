@@ -1,7 +1,7 @@
 import { Connection, KeyedAccountInfo, Keypair } from "@solana/web3.js";
-import { AUTO_BUY_DELAY, AUTO_SELL, AUTO_SELL_DELAY, BUY_SLIPPAGE, CACHE_NEW_MARKETS, CHECK_IF_BURNED, CHECK_IF_FREEZABLE, CHECK_IF_MINT_IS_RENOUNCED, COMMITMENT_LEVEL, COMPUTE_UNIT_LIMIT, COMPUTE_UNIT_PRICE, CUSTOM_FEE, LOG_LEVEL, MAX_BUY_RETRIES, MAX_POOL_SIZE, MAX_SELL_RETRIES, MIN_LP_BURNED_PERCENT, MIN_POOL_SIZE, ONE_TOKEN_AT_A_TIME, PRE_LOAD_EXISTING_MARKETS, PRICE_CHECK_DURATION, PRICE_CHECK_INTERVAL, PRIVATE_KEY, QUOTE_AMOUNT, QUOTE_MINT, RPC_ENDPOINT, RPC_WEBSOCKET_ENDPOINT, SELL_SLIPPAGE, STOP_LOSS, TAKE_PROFIT, TRANSACTION_EXECUTOR } from "./configs";
+import { AUTO_BUY_DELAY, AUTO_SELL, AUTO_SELL_DELAY, BUY_SLIPPAGE, CHECK_IF_BURNED, CHECK_IF_FREEZABLE, CHECK_IF_MINT_IS_RENOUNCED, COMMITMENT_LEVEL, COMPUTE_UNIT_LIMIT, COMPUTE_UNIT_PRICE, CUSTOM_FEE, LOG_LEVEL, MAX_BUY_RETRIES, MAX_POOL_SIZE, MAX_SELL_RETRIES, MIN_LP_BURNED_PERCENT, MIN_POOL_SIZE, ONE_TOKEN_AT_A_TIME, USE_TRACK_LIST, PRICE_CHECK_DURATION, PRICE_CHECK_INTERVAL, PRIVATE_KEY, QUOTE_AMOUNT, QUOTE_MINT, RPC_ENDPOINT, RPC_WEBSOCKET_ENDPOINT, SELL_SLIPPAGE, STOP_LOSS, TAKE_PROFIT, TRANSACTION_EXECUTOR } from "./configs";
 import { getWallet, logger } from "./utils";
-import { LIQUIDITY_STATE_LAYOUT_V4, MARKET_STATE_LAYOUT_V3, Token, TokenAmount } from "@raydium-io/raydium-sdk";
+import { LIQUIDITY_STATE_LAYOUT_V4, Token, TokenAmount } from "@raydium-io/raydium-sdk";
 import { Bot } from "./automation/bot";
 import { version } from './package.json';
 import { getToken } from "./utils/token";
@@ -9,7 +9,9 @@ import { IBotConfig } from "./types/bot.types";
 import { AccountLayout, getAssociatedTokenAddressSync } from "@solana/spl-token";
 import { MarketCache, PoolCache } from "./caches";
 import { DefaultExecutor, JitoExecutor } from "./executor";
-import { Listeners, OPEN_BOOK_SUBSCRIPTION_EVENT, POOL_SUBSCRIPTION_EVENT, WALLET_CHANGES_SUBSCRIPTION_EVENT } from "./listeners";
+import { Listeners, POOL_SUBSCRIPTION_EVENT, NEW_TOKENS_ADDED_EVENT } from "./listeners";
+import beforeShutdown from "./utils/before-shutdown";
+import { DB } from "./db";
 
 function printDetails(wallet: Keypair, quoteToken: Token, bot: Bot) {
   logger.info(`Bot Version: ${version} `);
@@ -32,8 +34,7 @@ function printDetails(wallet: Keypair, quoteToken: Token, bot: Bot) {
   }
 
   logger.info(`Single token at the time: ${botConfig.oneTokenAtATime}`);
-  logger.info(`Pre load existing markets: ${PRE_LOAD_EXISTING_MARKETS}`);
-  logger.info(`Cache new markets: ${CACHE_NEW_MARKETS}`);
+  logger.info(`Pre load Tracked markets: ${USE_TRACK_LIST}`);
   logger.info(`Log level: ${LOG_LEVEL}`);
 
   logger.info('- Buy -');
@@ -90,6 +91,7 @@ const botConfig: IBotConfig = {
   sellSlippage: SELL_SLIPPAGE,
   priceCheckInterval: PRICE_CHECK_INTERVAL,
   priceCheckDuration: PRICE_CHECK_DURATION,
+  useTrackList: USE_TRACK_LIST
 };
 
 const connection = new Connection(RPC_ENDPOINT, {
@@ -97,7 +99,7 @@ const connection = new Connection(RPC_ENDPOINT, {
   commitment: COMMITMENT_LEVEL,
 });
 
-const runListener = async () => {
+const run = async (db: DB) => {
   logger.level = LOG_LEVEL;
   logger.info('Starting bot ....');
 
@@ -111,7 +113,7 @@ const runListener = async () => {
     txExecutor = new DefaultExecutor(connection)
   }
 
-  const bot = new Bot(connection, marketCache, poolCache, txExecutor, botConfig);
+  const bot = new Bot(connection, marketCache, poolCache, txExecutor, botConfig, db);
 
   const isValid = await bot.validate();
 
@@ -120,8 +122,11 @@ const runListener = async () => {
     process.exit(1);
   }
 
-  if (PRE_LOAD_EXISTING_MARKETS) {
-    await marketCache.init({ quoteToken });
+  if (botConfig.useTrackList) {
+    const trackLists = await db.getCollection<"trackList">("trackList");
+    if (trackLists) {
+      await marketCache.init(trackLists);
+    }
   }
 
   const runTimestamp = Math.floor(new Date().getTime() / 1000);
@@ -131,15 +136,14 @@ const runListener = async () => {
     walletPublicKey: wallet.publicKey,
     quoteToken,
     autoSell: AUTO_SELL,
-    cacheNewMarkets: CACHE_NEW_MARKETS
   });
 
-  listeners.on(OPEN_BOOK_SUBSCRIPTION_EVENT, (updatedAccountInfo: KeyedAccountInfo) => {
-    const marketState = MARKET_STATE_LAYOUT_V3.decode(updatedAccountInfo.accountInfo.data);
+  // listeners.on(OPEN_BOOK_SUBSCRIPTION_EVENT, (updatedAccountInfo: KeyedAccountInfo) => {
+  //   const marketState = MARKET_STATE_LAYOUT_V3.decode(updatedAccountInfo.accountInfo.data);
 
-    const marketId = updatedAccountInfo.accountId.toString();
-    marketCache.save(marketId, marketState);
-  });
+  //   const marketId = updatedAccountInfo.accountId.toString();
+  //   marketCache.save(marketId, marketState);
+  // });
 
   // const testFilters = new PoolFilters(connection, {
   //   quoteToken: quoteToken,
@@ -152,19 +156,16 @@ const runListener = async () => {
     const poolOpenTime = parseInt(poolState.poolOpenTime.toString());
     const exists = await poolCache.get(poolState.baseMint.toBase58());
 
-
     if (!exists && poolOpenTime > runTimestamp) {
-      poolCache.save(updatedAccountInfo.accountId.toString(), poolState);
-      await bot.buy(updatedAccountInfo.accountId, poolState);
+      logger.trace(poolState);
 
-      // const shouldBuy = await testFilters.execute(poolState);
-      // if (shouldBuy) {
-      //   logger.info({ mint: poolState.baseMint.toBase58() }, 'matched pool');
-      // }
+      poolCache.save(updatedAccountInfo.accountId.toString(), poolState);
+
+      await bot.buy(updatedAccountInfo.accountId, poolState);
     }
   });
 
-  listeners.on(WALLET_CHANGES_SUBSCRIPTION_EVENT, async (updatedAccountInfo: KeyedAccountInfo) => {
+  listeners.on(NEW_TOKENS_ADDED_EVENT, async (updatedAccountInfo: KeyedAccountInfo) => {
     const accountData = AccountLayout.decode(updatedAccountInfo.accountInfo.data);
 
     if (accountData.mint.equals(quoteToken.mint)) {
@@ -174,7 +175,36 @@ const runListener = async () => {
     await bot.sell(updatedAccountInfo.accountId, accountData);
   });
 
+  const onInterrupt = async () => {
+    // save current selling tokens to the trackList
+    if(botConfig.useTrackList) {
+      const neededTrackTokens = Object.keys(bot.sellingTokens);
+      if(neededTrackTokens.length) {
+        const tokens = {};
+
+        for(let i = 0; i < neededTrackTokens.length; i++) {
+          const baseMint = neededTrackTokens[i];
+          const marketId = bot.sellingTokens[baseMint]
+
+          Object.assign({}, tokens, {
+            [baseMint]: marketId
+          });
+        }
+
+        await db.assigns("trackList", tokens);
+      }
+    }
+  }
+
   printDetails(wallet, quoteToken, bot);
+
+  // register trapping before shuting down
+  beforeShutdown(onInterrupt)
 }
 
-runListener();
+// init db
+const db = new DB('store/db.json');
+
+db.on('ready', () => {
+  run(db);
+});

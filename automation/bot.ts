@@ -8,8 +8,11 @@ import { RawAccount, TOKEN_PROGRAM_ID, createAssociatedTokenAccountIdempotentIns
 import { Liquidity, LiquidityPoolKeysV4, LiquidityStateV4, Percent, Token, TokenAmount } from "@raydium-io/raydium-sdk";
 import { MarketCache, PoolCache } from "../caches";
 import { createPoolKeys } from "../utils/pool";
-import { NETWORK } from "../configs";
+import { WAIT_FOR_RETRY_MS } from "../configs";
 import { BN } from "bn.js";
+import { DB } from "../db";
+import { TrackObject } from "../db/db.types";
+import _omit from 'lodash.omit';
 
 export class Bot {
   private readonly poolFilters: PoolFilters;
@@ -17,6 +20,7 @@ export class Bot {
   // one token at time
   private readonly mutex: Mutex;
   private sellExecutionCount = 0;
+  public sellingTokens: TrackObject = {};
 
   public readonly isJito: boolean = false;
 
@@ -25,7 +29,8 @@ export class Bot {
     private readonly marketCache: MarketCache,
     private readonly poolCache: PoolCache,
     private readonly executor: IExecutor,
-    readonly config: IBotConfig
+    readonly config: IBotConfig,
+    private readonly db: DB
   ) {
     this.isJito = executor instanceof JitoExecutor;
 
@@ -71,13 +76,14 @@ export class Bot {
     if (!match) {
       logger.debug({ mint: poolState.baseMint.toString() }, `Skipping buy because pool doesn't match filters`);
 
-      // unlock mutex
-      this.mutex.release();
-      
+      if (this.config.oneTokenAtATime && (this.mutex.isLocked() || this.sellExecutionCount > 0)) {
+        // unlock mutex
+        this.mutex.release();
+      }
+
       return;
     }
-    
-    
+
     try {
       const [market, mintATA] = await Promise.all([
         this.marketCache.getOrSet(poolState.marketId.toString()),
@@ -107,6 +113,14 @@ export class Bot {
           );
 
           if (result.confirmed) {
+            // store markets info
+            await this.db.set<"markets">("markets", {
+              marketId: poolState.marketId.toBase58(),
+              baseMint: poolState.baseMint.toBase58(),
+              poolId: accountId.toString(),
+              poolOpenTime: poolState.poolOpenTime.toNumber(),
+            }, poolState.baseMint.toBase58());
+
             logger.info(
               {
                 mint: poolState.baseMint.toString(),
@@ -119,7 +133,7 @@ export class Bot {
             break;
           }
 
-          logger.info(
+          logger.error(
             {
               mint: poolState.baseMint.toString(),
               signature: result.signature,
@@ -128,11 +142,13 @@ export class Bot {
             `Error in confirming buy tx`,
           );
         } catch (e) {
-          logger.debug({ mint: poolState.baseMint.toString(), e }, `Error confirming buy transaction`);
+          logger.error({ mint: poolState.baseMint.toString(), e }, `[1] Error confirming buy transaction`);
         }
+        // walt awhile before retrying
+        await sleep(WAIT_FOR_RETRY_MS)
       }
     } catch (e) {
-      logger.debug({ mint: poolState.baseMint.toString(), e }, `Error confirming buy transaction`);
+      logger.error({ mint: poolState.baseMint.toString(), e }, `[2] Error confirming buy transaction`);
     } finally {
       if (this.config.oneTokenAtATime) {
         this.mutex.release();
@@ -141,6 +157,21 @@ export class Bot {
   }
 
   public async sell(accountId: PublicKey, rawAccount: RawAccount) {
+    const poolData = await this.poolCache.get(rawAccount.mint.toBase58());
+
+    if (!poolData) {
+      logger.trace({ mint: rawAccount.mint.toString() }, `Token pool data is not found, can't sell`);
+      return;
+    }
+
+    const tokenIn = new Token(TOKEN_PROGRAM_ID, poolData.state.baseMint, poolData.state.baseDecimal.toNumber());
+    const tokenAmountIn = new TokenAmount(tokenIn, rawAccount.amount, true);
+
+    if (tokenAmountIn.isZero()) {
+      logger.info({ mint: rawAccount.mint.toString() }, `Empty balance, can't sell`);
+      return;
+    }
+
     if (this.config.oneTokenAtATime) {
       this.sellExecutionCount++;
     }
@@ -148,25 +179,11 @@ export class Bot {
     try {
       logger.trace({ mint: rawAccount.mint.toString() }, `Processing selling token...`);
 
-      const poolData = await this.poolCache.get(rawAccount.mint.toBase58());
-
-      if (!poolData) {
-        logger.trace({ mint: rawAccount.mint.toString() }, `Token pool data is not found, can't sell`);
-        return;
-      }
-
-      const tokenIn = new Token(TOKEN_PROGRAM_ID, poolData.state.baseMint, poolData.state.baseDecimal.toNumber());
-      const tokenAmountIn = new TokenAmount(tokenIn, rawAccount.amount, true);
-
-      if (tokenAmountIn.isZero()) {
-        logger.info({ mint: rawAccount.mint.toString() }, `Empty balance, can't sell`);
-        return;
-      }
-
       if (this.config.autoSellDelay > 0) {
         logger.debug({ mint: rawAccount.mint.toString() }, `Waiting for ${this.config.autoSellDelay}ms before sell`);
         await sleep(this.config.autoSellDelay);
       }
+
 
       const market = await this.marketCache.getOrSet(poolData.state.marketId.toString());
       const poolKeys: LiquidityPoolKeysV4 = createPoolKeys(
@@ -174,6 +191,12 @@ export class Bot {
         poolData.state,
         market
       );
+
+      if(this.config.useTrackList && !this.sellingTokens.hasOwnProperty(poolData.state.baseMint.toBase58())) {
+        this.sellingTokens = Object.assign({}, this.sellingTokens, {
+          [poolData.state.baseMint.toBase58()]: poolData.state.marketId.toBase58()
+        });
+      }
 
       await this._priceMatch(tokenAmountIn, poolKeys);
 
@@ -197,6 +220,8 @@ export class Bot {
           );
 
           if (result.confirmed) {
+            this.onSellCompleted(poolData.state);
+
             logger.info(
               {
                 dex: `https://dexscreener.com/solana/${rawAccount.mint.toString()}?maker=${this.config.wallet.publicKey}`,
@@ -230,10 +255,25 @@ export class Bot {
     }
   }
 
+  private async onSellCompleted(poolState: LiquidityStateV4) {
+    const baseMint = poolState.baseMint.toBase58();
+    // remove markets info
+    await this.db.delete("markets", baseMint);
+
+    if(this.config.useTrackList && this.sellingTokens.hasOwnProperty(baseMint)) {
+      this.sellingTokens = _omit(this.sellingTokens, [baseMint]);
+
+      // remove trackList if any
+      if(await this.db.get<"trackList">("trackList", baseMint)) {
+        await this.db.delete("trackList", poolState.baseMint.toBase58());
+      }
+    }
+  }
+
   private async _filterMatch(poolState: LiquidityStateV4): Promise<boolean> {
     try {
       const shouldBuy = await this.poolFilters.execute(poolState);
-      
+
       return shouldBuy;
     } catch (e) {
     }

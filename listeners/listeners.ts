@@ -1,7 +1,7 @@
 import { LIQUIDITY_STATE_LAYOUT_V4, LiquidityPoolStatus, MAINNET_PROGRAM_ID, MARKET_STATE_LAYOUT_V3, SPL_ACCOUNT_LAYOUT, SPL_MINT_LAYOUT, Token } from "@raydium-io/raydium-sdk";
 import { Connection, GetProgramAccountsFilter, ProgramAccountChangeCallback, PublicKey } from "@solana/web3.js";
 import EventEmitter from "events";
-import { OPEN_BOOK_SUBSCRIPTION_EVENT, POOL_SUBSCRIPTION_EVENT, WALLET_CHANGES_SUBSCRIPTION_EVENT } from "./listeners.events";
+import { OPEN_BOOK_SUBSCRIPTION_EVENT, POOL_SUBSCRIPTION_EVENT, NEW_TOKENS_ADDED_EVENT } from "./listeners.events";
 import { TOKEN_PROGRAM_ID } from "@solana/spl-token";
 import { poolStatusToBytes } from "../utils/pool";
 
@@ -9,7 +9,6 @@ export interface IListenersStartConfig {
   walletPublicKey: PublicKey;
   quoteToken: Token;
   autoSell: boolean;
-  cacheNewMarkets: boolean;
 }
 
 export class Listeners extends EventEmitter {
@@ -20,11 +19,6 @@ export class Listeners extends EventEmitter {
   }
 
   public async start(config: IListenersStartConfig) {
-    if (config.cacheNewMarkets) {
-      const openBookSubscription = await this._subscribeToOpenBookMarkets(config);
-      this.subcriptions.push(openBookSubscription);
-    }
-
     const raydiumSubscription = await this._subscribeToRaydiumPools(config);
     this.subcriptions.push(raydiumSubscription);
 
@@ -42,28 +36,28 @@ export class Listeners extends EventEmitter {
     }
   }
 
-  private async _subscribeToOpenBookMarkets(config: IListenersStartConfig): Promise<number> {
-    const callback: ProgramAccountChangeCallback = async (updatedAccountInfo) => {
-      this.emit(OPEN_BOOK_SUBSCRIPTION_EVENT, updatedAccountInfo)
-    };
+  // private async _subscribeToOpenBookMarkets(config: IListenersStartConfig): Promise<number> {
+  //   const callback: ProgramAccountChangeCallback = async (updatedAccountInfo) => {
+  //     this.emit(OPEN_BOOK_SUBSCRIPTION_EVENT, updatedAccountInfo)
+  //   };
 
-    const filters: GetProgramAccountsFilter[] = [
-      { dataSize: MARKET_STATE_LAYOUT_V3.span },
-      {
-        memcmp: {
-          offset: MARKET_STATE_LAYOUT_V3.offsetOf('quoteMint'),
-          bytes: config.quoteToken.mint.toBase58(),
-        }
-      }
-    ];
+  //   const filters: GetProgramAccountsFilter[] = [
+  //     { dataSize: MARKET_STATE_LAYOUT_V3.span },
+  //     {
+  //       memcmp: {
+  //         offset: MARKET_STATE_LAYOUT_V3.offsetOf('quoteMint'),
+  //         bytes: config.quoteToken.mint.toBase58(),
+  //       }
+  //     }
+  //   ];
 
-    return this.connection.onProgramAccountChange(
-      MAINNET_PROGRAM_ID.OPENBOOK_MARKET,
-      callback,
-      this.connection.commitment,
-      filters
-    );
-  }
+  //   return this.connection.onProgramAccountChange(
+  //     MAINNET_PROGRAM_ID.OPENBOOK_MARKET,
+  //     callback,
+  //     this.connection.commitment,
+  //     filters
+  //   );
+  // }
 
   private async _subscribeToRaydiumPools(config: IListenersStartConfig): Promise<number> {
     const callback: ProgramAccountChangeCallback = async (updatedAccountInfo) => {
@@ -102,7 +96,7 @@ export class Listeners extends EventEmitter {
 
   private async _subscribeToWalletChanges(config: IListenersStartConfig): Promise<number> {
     const callback: ProgramAccountChangeCallback = async (updatedAccountInfo) => {
-      this.emit(WALLET_CHANGES_SUBSCRIPTION_EVENT, updatedAccountInfo)
+      this.emit(NEW_TOKENS_ADDED_EVENT, updatedAccountInfo)
     };
 
     const filters: GetProgramAccountsFilter[] = [

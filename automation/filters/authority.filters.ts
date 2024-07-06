@@ -24,7 +24,7 @@ export class AuthorityFilter implements IFilter {
     //   logger.error({ mint: poolState.baseMint.toString() }, `checkFreezable -> Creator can Freeze tokens`)
     // }
 
-    return !freezable;
+    return freezable;
   }
 
   async execute(poolState: LiquidityStateV4): Promise<boolean> {
@@ -43,7 +43,8 @@ export class AuthorityFilter implements IFilter {
       }
 
       if(CHECK_IF_FREEZABLE) {
-        tests.push(this.checkFreezable(rawData, poolState));
+        // should can not freezable tokens
+        tests.push(!this.checkFreezable(rawData, poolState));
       }
 
       return tests.every((passed) => passed === true);
