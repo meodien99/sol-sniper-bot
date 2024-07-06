@@ -1,6 +1,6 @@
 export type DBCollection = "markets" | "trackList";
 
-export type TrackListItem = Record<string, string>;
+export type TrackObject = Record<string, string>;
 
 export interface IMarketItem {
   marketId: string;
@@ -11,19 +11,19 @@ export interface IMarketItem {
 
 export interface DBStructures {
   "markets"?: Record<string, IMarketItem>;
-  "trackList"?: TrackListItem;
+  "trackList"?: TrackObject;
 }
+
+export type DBStructure<K extends keyof DBStructures = keyof DBStructures> = {
+  [P in K]: DBStructures[P]
+}[K]
 
 export type DBValueSets = {
   "markets": IMarketItem,
-  "trackList": TrackListItem
+  "trackList": string
 };
 
 export type DBValueSet<K extends keyof DBValueSets = keyof DBValueSets> = {
   [P in K]: DBValueSets[P]
-}[K]
-
-export type DBItem<K extends keyof DBStructures = keyof DBStructures> = {
-  [P in K]: DBStructures[P]
 }[K]
 

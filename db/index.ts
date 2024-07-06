@@ -5,9 +5,9 @@ import { v4 as uuidv4 } from 'uuid';
 import _get from 'lodash.get';
 import _set from 'lodash.set';
 import _omit from 'lodash.omit';
-import { DBCollection, DBItem, DBStructures, DBValueSet, DBValueSets } from './db.types';
+import { DBCollection, DBStructure, DBStructures, DBValueSet, DBValueSets } from './db.types';
 
-const emptyStringObject = JSON.stringify({});
+const emptyStringObject = JSON.stringify({}, null, 2);
 
 export class DB extends EventEmitter {
   private path: string;
@@ -34,6 +34,7 @@ export class DB extends EventEmitter {
   }
 
   /**
+   * Set a value to collection by overriding the old one.
    * 
    * @param collection string
    * @param value any
@@ -63,14 +64,28 @@ export class DB extends EventEmitter {
     }
   }
 
+  // assign bunch of data instead of overriding the old one
+  public async assigns<T extends keyof DBValueSets>(collection: DBCollection, values: Record<string, DBStructure<T>>): Promise<void> {
+    try {
+      if (typeof collection !== "string") {
+        throw new TypeError("Collection should be a string");
+      }
+
+      const data = Object.assign({}, _get(this.storage, [collection]), values);
+
+      _set(this.storage, [collection], data);
+
+      await this.save();
+    } catch (err) {
+      throw err;
+    }
+  }
+
   public async delete(collection: DBCollection, _id: string): Promise<void> {
-    const orignal = await this.get(collection);
+    const orignal = _get(this.storage, [collection]);
     const omitted = _omit(orignal, [_id]);
 
-    this.storage = {
-      ...this.storage,
-      [collection]: omitted
-    };
+    _set(this.storage, [collection], omitted);
 
     await this.save();
   }
@@ -105,19 +120,27 @@ export class DB extends EventEmitter {
    * 
    * DB.get('a', <uuid1>) // => { name: 'Name' } 
    */
-  public async get<T extends keyof DBStructures>(collection: DBCollection, _id?: string): Promise<DBItem<T> | DBValueSet<T> | undefined> {
+  public async get<T extends keyof DBStructures>(collection: DBCollection, _id: string): Promise<DBValueSet<T> | undefined> {
     try {
       if (typeof collection !== "string") {
         throw new TypeError("Collection should be a string");
       }
 
-      const path: string[] = [collection];
-
-      if (_id) {
-        path.push(_id);
-      }
+      const path: string[] = [collection, _id];
 
       return _get(this.storage, path);
+    } catch (err) {
+      throw err;
+    }
+  }
+
+  public async getCollection<T extends keyof DBStructures>(collection: DBCollection): Promise<DBStructure<T> | undefined> {
+    try {
+      if (typeof collection !== "string") {
+        throw new TypeError("Collection should be a string");
+      }
+
+      return _get(this.storage, [collection]) as DBStructure<T>;
     } catch (err) {
       throw err;
     }
@@ -205,7 +228,7 @@ export class DB extends EventEmitter {
   }
 
   public async save() {
-    await fs.writeFile(this.path, JSON.stringify(this.storage));
+    await fs.writeFile(this.path, JSON.stringify(this.storage, null, 2));
   }
 
 }
