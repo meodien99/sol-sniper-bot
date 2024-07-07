@@ -60,6 +60,8 @@ export const ONE_TOKEN_AT_A_TIME = retrieveEnvVariable('ONE_TOKEN_AT_A_TIME', lo
 export const COMPUTE_UNIT_LIMIT = Number(retrieveEnvVariable('COMPUTE_UNIT_LIMIT', logger));
 export const COMPUTE_UNIT_PRICE = Number(retrieveEnvVariable('COMPUTE_UNIT_PRICE', logger));
 export const USE_TRACK_LIST = retrieveEnvVariable('USE_TRACK_LIST', logger) === 'true';
+export const TRACK_SELLING_TOKENS_ON_EXIT = retrieveEnvVariable('TRACK_SELLING_TOKENS_ON_EXIT', logger) === 'true';
+export const TRACK_ITEMS_LIMIT = retrieveEnvVariable('TRACK_ITEMS_LIMIT', logger) || 0;
 export const TRANSACTION_EXECUTOR = retrieveEnvVariable('TRANSACTION_EXECUTOR', logger);
 export const CUSTOM_FEE = retrieveEnvVariable('CUSTOM_FEE', logger);
 export const WAIT_FOR_RETRY_MS = retrieveEnvVariable('WAIT_FOR_RETRY_MS', logger) || 0;

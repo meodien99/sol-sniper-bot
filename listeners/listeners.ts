@@ -1,7 +1,7 @@
 import { LIQUIDITY_STATE_LAYOUT_V4, LiquidityPoolStatus, MAINNET_PROGRAM_ID, MARKET_STATE_LAYOUT_V3, SPL_ACCOUNT_LAYOUT, SPL_MINT_LAYOUT, Token } from "@raydium-io/raydium-sdk";
 import { Connection, GetProgramAccountsFilter, ProgramAccountChangeCallback, PublicKey } from "@solana/web3.js";
 import EventEmitter from "events";
-import { OPEN_BOOK_SUBSCRIPTION_EVENT, POOL_SUBSCRIPTION_EVENT, NEW_TOKENS_ADDED_EVENT } from "./listeners.events";
+import { POOL_SUBSCRIPTION_EVENT, PREPARE_FOR_SELLING_EVENT } from "./listeners.events";
 import { TOKEN_PROGRAM_ID } from "@solana/spl-token";
 import { poolStatusToBytes } from "../utils/pool";
 
@@ -96,7 +96,7 @@ export class Listeners extends EventEmitter {
 
   private async _subscribeToWalletChanges(config: IListenersStartConfig): Promise<number> {
     const callback: ProgramAccountChangeCallback = async (updatedAccountInfo) => {
-      this.emit(NEW_TOKENS_ADDED_EVENT, updatedAccountInfo)
+      this.emit(PREPARE_FOR_SELLING_EVENT, updatedAccountInfo)
     };
 
     const filters: GetProgramAccountsFilter[] = [

@@ -2,16 +2,13 @@
 import { MinimalMarketLayoutV3, getMinimalMarketV3 } from "../utils/market";
 import { logger } from "../utils";
 import { Connection, PublicKey } from "@solana/web3.js";
-import { TrackObject } from "../db/db.types";
 
 export class MarketCache {
   private readonly keys: Map<string, MinimalMarketLayoutV3> = new Map<string, MinimalMarketLayoutV3>();
 
   constructor(private readonly connection: Connection) { }
 
-  async init(lists: TrackObject) {
-    const markets = Object.values(lists);
-
+  public async load(markets: string[]) {
     if (markets.length) {
       for (let i = 0; i < markets.length; i++) {
         const marketId = markets[i];

@@ -22,5 +22,5 @@ export interface IBotConfig {
   sellSlippage: number;
   priceCheckInterval: number;
   priceCheckDuration: number;
-  useTrackList: boolean;
+  trackSellingTokens: boolean;
 }

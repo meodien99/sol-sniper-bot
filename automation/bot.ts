@@ -5,7 +5,7 @@ import { IConfirmResponse, IExecutor, JitoExecutor } from "../executor";
 import { IBotConfig } from "../types/bot.types";
 import { logger, sleep } from "../utils";
 import { RawAccount, TOKEN_PROGRAM_ID, createAssociatedTokenAccountIdempotentInstruction, createCloseAccountInstruction, getAccount, getAssociatedTokenAddress } from "@solana/spl-token";
-import { Liquidity, LiquidityPoolKeysV4, LiquidityStateV4, Percent, Token, TokenAmount } from "@raydium-io/raydium-sdk";
+import { Liquidity, LiquidityPoolKeysV4, LiquidityStateV4, Percent, Token, TokenAmount, parseBigNumberish } from "@raydium-io/raydium-sdk";
 import { MarketCache, PoolCache } from "../caches";
 import { createPoolKeys } from "../utils/pool";
 import { WAIT_FOR_RETRY_MS } from "../configs";
@@ -157,7 +157,7 @@ export class Bot {
   }
 
   public async sell(accountId: PublicKey, rawAccount: RawAccount) {
-    const poolData = await this.poolCache.get(rawAccount.mint.toBase58());
+    const poolData = this.poolCache.get(rawAccount.mint.toBase58());
 
     if (!poolData) {
       logger.trace({ mint: rawAccount.mint.toString() }, `Token pool data is not found, can't sell`);
@@ -192,7 +192,7 @@ export class Bot {
         market
       );
 
-      if(this.config.useTrackList && !this.sellingTokens.hasOwnProperty(poolData.state.baseMint.toBase58())) {
+      if(this.config.trackSellingTokens && !this.sellingTokens.hasOwnProperty(poolData.state.baseMint.toBase58())) {
         this.sellingTokens = Object.assign({}, this.sellingTokens, {
           [poolData.state.baseMint.toBase58()]: poolData.state.marketId.toBase58()
         });
@@ -260,12 +260,13 @@ export class Bot {
     // remove markets info
     await this.db.delete("markets", baseMint);
 
-    if(this.config.useTrackList && this.sellingTokens.hasOwnProperty(baseMint)) {
+    if(this.config.trackSellingTokens && this.sellingTokens.hasOwnProperty(baseMint)) {
       this.sellingTokens = _omit(this.sellingTokens, [baseMint]);
 
       // remove trackList if any
-      if(await this.db.get<"trackList">("trackList", baseMint)) {
-        await this.db.delete("trackList", poolState.baseMint.toBase58());
+      const exists = await this.db.get<"track">("track", baseMint);
+      if(!!exists) {
+        await this.db.delete("track", poolState.baseMint.toBase58());
       }
     }
   }

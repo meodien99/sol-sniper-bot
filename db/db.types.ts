@@ -1,4 +1,4 @@
-export type DBCollection = "markets" | "trackList";
+export type DBCollection = "markets" | "track";
 
 export type TrackObject = Record<string, string>;
 
@@ -11,7 +11,7 @@ export interface IMarketItem {
 
 export interface DBStructures {
   "markets"?: Record<string, IMarketItem>;
-  "trackList"?: TrackObject;
+  "track"?: TrackObject;
 }
 
 export type DBStructure<K extends keyof DBStructures = keyof DBStructures> = {
@@ -20,7 +20,7 @@ export type DBStructure<K extends keyof DBStructures = keyof DBStructures> = {
 
 export type DBValueSets = {
   "markets": IMarketItem,
-  "trackList": string
+  "track": string
 };
 
 export type DBValueSet<K extends keyof DBValueSets = keyof DBValueSets> = {
