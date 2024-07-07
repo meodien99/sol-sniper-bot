@@ -1,7 +1,7 @@
 import { Connection } from "@solana/web3.js";
 import { IFilter } from "../../types/filter.types";
 import { LiquidityStateV4 } from "@raydium-io/raydium-sdk";
-import { BaseJSONRPCErrorCode, logger } from "../../utils";
+import { logger } from "../../utils";
 import { MintLayout } from "@solana/spl-token";
 import { BN } from "bn.js";
 import { MIN_LP_BURNED_PERCENT } from "../../configs";
@@ -28,9 +28,9 @@ export class LiquidityFilter implements IFilter {
       const burnAmt = maxLpSupply.sub(actualSupply);
       const burnedPercent = burnAmt.toNumber() / maxLpSupply.toNumber() * 100;
       
-      const validPercent = MIN_LP_BURNED_PERCENT || 0;
+      const minBurnedPercent = MIN_LP_BURNED_PERCENT || 0;
 
-      const burned = burnedPercent >= validPercent;
+      const burned = burnedPercent >= minBurnedPercent;
 
       // logger.info({
       //   mint: poolState.baseMint.toString(),
@@ -43,9 +43,9 @@ export class LiquidityFilter implements IFilter {
       //   actualSupply: actualSupply.toNumber()
       // }, `Burned LP info`);
 
-      // if (!burned) {
-      //   logger.error({ mint: poolState.baseMint.toString(), lpMint: poolState.lpMint.toString() }, `Burned -> Creator did not burn LP`);
-      // }
+      if (!burned) {
+        logger.info(`Burned: False`);
+      }
 
       return burned;
     } catch (e: any) {

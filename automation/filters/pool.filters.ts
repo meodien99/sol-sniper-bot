@@ -1,7 +1,7 @@
 import { Connection } from "@solana/web3.js";
 import { IFilter, IPoolFilterArgs } from "../../types/filter.types";
 import { CHECK_IF_BURNED, CHECK_IF_FREEZABLE, CHECK_IF_MINT_IS_RENOUNCED, CHECK_IF_MUTABLE, CHECK_IF_SOCIALS } from "../../configs";
-import { MutableFilter } from "./mutable.filter";
+import { MetadataFilter } from "./metadata.filter";
 import { PoolSizeFilter } from "./poolSize.filter";
 import { getMetadataAccountDataSerializer } from "@metaplex-foundation/mpl-token-metadata";
 import { LiquidityStateV4 } from "@raydium-io/raydium-sdk";
@@ -21,7 +21,7 @@ export class PoolFilters {
     }
 
     if (CHECK_IF_MUTABLE || CHECK_IF_SOCIALS) {
-      this.filters.push(new MutableFilter(connection, getMetadataAccountDataSerializer()));
+      this.filters.push(new MetadataFilter(connection, getMetadataAccountDataSerializer()));
     }
 
     if (!args.minPoolSize.isZero() || !args.maxPoolSize.isZero()) {

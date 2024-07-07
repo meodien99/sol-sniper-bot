@@ -6,9 +6,7 @@ import { Serializer } from '@metaplex-foundation/umi/serializers';
 import { logger } from "../../utils";
 import { CHECK_IF_MUTABLE, CHECK_IF_SOCIALS } from "../../configs";
 
-export class MutableFilter implements IFilter {
-  private readonly errorMessages: string[] = [];
-
+export class MetadataFilter implements IFilter {
   constructor(
     private readonly connection: Connection,
     private readonly metadataSerializer: Serializer<MetadataAccountDataArgs, MetadataAccountDataArgs>,
@@ -31,13 +29,17 @@ export class MutableFilter implements IFilter {
 
       if (CHECK_IF_MUTABLE) {
         const mutable = metadataAccountDataArgs.isMutable;
-
+        if (!mutable) {
+          logger.info(`Mutable: False`)
+        }
         tests.push(mutable);
       }
 
-      if(CHECK_IF_SOCIALS) {
+      if (CHECK_IF_SOCIALS) {
         const hasSocials = await this.hasSocials(metadataAccountDataArgs);
-
+        if (!hasSocials) {
+          logger.info(`Social: False`)
+        }
         tests.push(hasSocials);
       }
 
@@ -50,13 +52,18 @@ export class MutableFilter implements IFilter {
   }
 
   private async hasSocials(metadata: MetadataAccountDataArgs): Promise<boolean> {
-    if(!metadata.uri) {
+    if (!metadata.uri) {
       return false;
     }
-    
-    const response = await fetch(metadata.uri);
-    const data = await response.json();
 
-    return Object.values(data?.extensions ?? {}).some((value: any) => value !== null && value.length > 0);
+    const expression = /https?:\/\/(www\.)?[-a-zA-Z0-9@:%._\+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b([-a-zA-Z0-9()@:%_\+.~#?&//=]*)/gi;
+    const regex = new RegExp(expression);
+
+    return !!metadata.uri.match(regex);
+
+    // const response = await fetch(metadata.uri);
+    // const data = await response.json();
+
+    // return Object.values(data?.extensions ?? {}).some((value: any) => value !== null && value.length > 0);
   }
 }
