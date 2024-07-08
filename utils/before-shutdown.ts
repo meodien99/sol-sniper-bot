@@ -14,7 +14,7 @@ const SHUTDOWN_SIGNALS = ['SIGINT', 'SIGTERM'];
  * Time in milliseconds to wait before forcing shutdown.
  * @const {number}
  */
-const SHUTDOWN_TIMEOUT = 15000;
+const SHUTDOWN_TIMEOUT = 10000;
 /**
  * A queue of listener callbacks to execute before shutting
  * down the process.
@@ -25,8 +25,8 @@ const shutdownListeners: BeforeShutdownListener[] = [];
  * @param  {string[]} signals System signals to listen to.
  * @param  {function(string)} fn Function to execute on shutdown.
  */
-const processOnce = (signals: string[], fn: (arg0: string) => any) => {
-  return signals.forEach(sig => process.once(sig, fn));
+const processOn = (signals: string[], fn: (arg0: string) => any) => {
+  return signals.forEach(sig => process.on(sig, fn));
 };
 /**
  * Sets a forced shutdown mechanism that will exit the process after `timeout` milliseconds.
@@ -70,9 +70,9 @@ function beforeShutdown(listener: BeforeShutdownListener): BeforeShutdownListene
 
 // Register shutdown callback that kills the process after `SHUTDOWN_TIMEOUT` milliseconds
 // This prevents custom shutdown handlers from hanging the process indefinitely
-processOnce(SHUTDOWN_SIGNALS, forceExitAfter(SHUTDOWN_TIMEOUT));
+// processOn(SHUTDOWN_SIGNALS, forceExitAfter(SHUTDOWN_TIMEOUT));
 // Register process shutdown callback
 // Will listen to incoming signal events and execute all registered handlers in the stack
-processOnce(SHUTDOWN_SIGNALS, shutdownHandler);
+processOn(SHUTDOWN_SIGNALS, shutdownHandler);
 
 export default beforeShutdown;

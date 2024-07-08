@@ -64,8 +64,17 @@ export class DB extends EventEmitter {
     }
   }
 
-  // assign bunch of data instead of overriding the old one
-  public async assigns<T extends keyof DBValueSets>(collection: DBCollection, values: Record<string, DBStructure<T>>): Promise<void> {
+  /**
+   * assign bunch of data instead of overriding the old one
+   * @param collection 
+   * @param values 
+   * 
+   * db.assign<"markets">("markets", {
+   *  "id1": IMarketItem,
+   *  "id2": IMarketItem,
+   * })
+   */
+  public async assigns<T extends keyof DBValueSets>(collection: DBCollection, values: DBStructure<T>): Promise<void> {
     try {
       if (typeof collection !== "string") {
         throw new TypeError("Collection should be a string");

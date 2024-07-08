@@ -113,13 +113,13 @@ export class Bot {
           );
 
           if (result.confirmed) {
-            // store markets info
-            await this.db.set<"markets">("markets", {
-              marketId: poolState.marketId.toBase58(),
-              baseMint: poolState.baseMint.toBase58(),
-              poolId: accountId.toString(),
-              poolOpenTime: poolState.poolOpenTime.toNumber(),
-            }, poolState.baseMint.toBase58());
+            // // store markets info
+            // await this.db.set<"markets">("markets", {
+            //   marketId: poolState.marketId.toBase58(),
+            //   baseMint: poolState.baseMint.toBase58(),
+            //   poolId: accountId.toString(),
+            //   poolOpenTime: poolState.poolOpenTime.toNumber(),
+            // }, poolState.baseMint.toBase58());
 
             logger.info(
               {
@@ -192,7 +192,7 @@ export class Bot {
         market
       );
 
-      if(this.config.trackSellingTokens && !this.sellingTokens.hasOwnProperty(poolData.state.baseMint.toBase58())) {
+      if (this.config.trackSellingTokens && !this.sellingTokens.hasOwnProperty(poolData.state.baseMint.toBase58())) {
         this.sellingTokens = Object.assign({}, this.sellingTokens, {
           [poolData.state.baseMint.toBase58()]: poolData.state.marketId.toBase58()
         });
@@ -200,6 +200,16 @@ export class Bot {
 
       await this._priceMatch(tokenAmountIn, poolKeys);
 
+      // if(!matched) {
+      //   logger.info({mint: rawAccount.mint.toString()}, "can not get the target price -> Stop fetching.");
+
+      //   if(!this.config.sellAnyway) {
+      //     return;
+      //   }
+      //   logger.info({mint: rawAccount.mint.toString()}, "Sell anyway.");
+      // }
+
+      // trying sell even loss (to redeem rent fee)
       for (let i = 0; i < this.config.maxSellRetries; i++) {
         try {
           logger.info(
@@ -220,7 +230,7 @@ export class Bot {
           );
 
           if (result.confirmed) {
-            this.onSellCompleted(poolData.state);
+            // this.onSellCompleted(poolData.state);
 
             logger.info(
               {
@@ -260,12 +270,12 @@ export class Bot {
     // remove markets info
     await this.db.delete("markets", baseMint);
 
-    if(this.config.trackSellingTokens && this.sellingTokens.hasOwnProperty(baseMint)) {
+    if (this.config.trackSellingTokens && this.sellingTokens.hasOwnProperty(baseMint)) {
       this.sellingTokens = _omit(this.sellingTokens, [baseMint]);
 
       // remove trackList if any
       const exists = await this.db.get<"track">("track", baseMint);
-      if(!!exists) {
+      if (!!exists) {
         await this.db.delete("track", poolState.baseMint.toBase58());
       }
     }
@@ -293,11 +303,16 @@ export class Bot {
     const profitAmount = new TokenAmount(this.config.quoteToken, profitFraction, true);
     const takeProfit = this.config.quoteAmount.add(profitAmount);
 
-    const lossFraction = this.config.quoteAmount.mul(this.config.stopLoss).numerator.div(new BN(100));
-    const lossAmount = new TokenAmount(this.config.quoteToken, lossFraction, true);
-    const stopLoss = this.config.quoteAmount.subtract(lossAmount);
-    const slippage = new Percent(this.config.sellSlippage, 100);
+    let stopLoss;
 
+    if(this.config.stopLoss){
+      const lossFraction = this.config.quoteAmount.mul(this.config.stopLoss).numerator.div(new BN(100));
+      const lossAmount = new TokenAmount(this.config.quoteToken, lossFraction, true);
+      stopLoss = this.config.quoteAmount.subtract(lossAmount);
+    }
+
+    const slippage = new Percent(this.config.sellSlippage, 100);
+   
     let timesChecked = 0;
 
     do {
@@ -315,10 +330,10 @@ export class Bot {
           slippage
         });
 
-        if (amountOut.lt(stopLoss) || amountOut.gt(takeProfit)) {
-          logger.debug(
+        if (amountOut.gt(takeProfit) || (this.config.stopLoss && amountOut.lt(stopLoss as TokenAmount))) {
+          logger.warn(
             { mint: poolKeys.baseMint.toString() },
-            `Prepare a sell for Taking profit at: ${takeProfit.toFixed()} | Stop loss: ${stopLoss.toFixed()} | Current: ${amountOut.toFixed()}`,
+            `Prepare a sell for Taking profit at: ${takeProfit.toFixed()} | Stop loss: ${stopLoss?.toFixed() || 0} | Current: ${amountOut.toFixed()}`,
           );
           break;
         }
@@ -358,7 +373,7 @@ export class Bot {
       slippage: slippagePercent
     });
 
-    const lastestBlockHash = await this.connection.getLatestBlockhash();
+    const lastestBlockHash = await this.connection.getLatestBlockhash(this.connection.commitment);
 
     const { innerTransaction } = Liquidity.makeSwapFixedInInstruction({
       amountIn: amountIn.raw,

@@ -1,6 +1,6 @@
 import { Connection } from "@solana/web3.js";
 import { IFilter, IPoolFilterArgs } from "../../types/filter.types";
-import { CHECK_IF_BURNED, CHECK_IF_FREEZABLE, CHECK_IF_MINT_IS_RENOUNCED, CHECK_IF_MUTABLE, CHECK_IF_SOCIALS } from "../../configs";
+import { CHECK_IF_BURNED, CHECK_IF_FREEZABLE, CHECK_IF_MINT_IS_RENOUNCED, CHECK_IF_MUTABLE, CHECK_IF_SOCIALS, MIN_LP_BURNED_PERCENT } from "../../configs";
 import { MetadataFilter } from "./metadata.filter";
 import { PoolSizeFilter } from "./poolSize.filter";
 import { getMetadataAccountDataSerializer } from "@metaplex-foundation/mpl-token-metadata";
@@ -16,7 +16,7 @@ export class PoolFilters {
       this.filters.push(new AuthorityFilter(connection));
     }
 
-    if(CHECK_IF_BURNED) {
+    if(CHECK_IF_BURNED && MIN_LP_BURNED_PERCENT > 0) {
       this.filters.push(new LiquidityFilter(connection));
     }
 

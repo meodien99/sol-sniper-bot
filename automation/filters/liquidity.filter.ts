@@ -27,21 +27,10 @@ export class LiquidityFilter implements IFilter {
       const maxLpSupply = BN.max(actualSupply, lpReserve.sub(new BN(1)));
       const burnAmt = maxLpSupply.sub(actualSupply);
       const burnedPercent = burnAmt.toNumber() / maxLpSupply.toNumber() * 100;
-      
-      const minBurnedPercent = MIN_LP_BURNED_PERCENT || 0;
+
+      const minBurnedPercent = MIN_LP_BURNED_PERCENT;
 
       const burned = burnedPercent >= minBurnedPercent;
-
-      // logger.info({
-      //   mint: poolState.baseMint.toString(),
-      //   lpMint: poolState.lpMint.toString(),
-      //   burnedPercent,
-      //   burned,
-      //   burnAmt: burnAmt.toNumber(),
-      //   maxSupply: maxLpSupply.toNumber(),
-      //   lpReserve: lpReserve.toNumber(),
-      //   actualSupply: actualSupply.toNumber()
-      // }, `Burned LP info`);
 
       if (!burned) {
         logger.info(`Burned: False`);

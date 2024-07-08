@@ -1,5 +1,5 @@
 import { Connection, KeyedAccountInfo, Keypair } from "@solana/web3.js";
-import { AUTO_BUY_DELAY, AUTO_SELL, AUTO_SELL_DELAY, BUY_SLIPPAGE, CHECK_IF_BURNED, CHECK_IF_FREEZABLE, CHECK_IF_MINT_IS_RENOUNCED, COMMITMENT_LEVEL, COMPUTE_UNIT_LIMIT, COMPUTE_UNIT_PRICE, CUSTOM_FEE, LOG_LEVEL, MAX_BUY_RETRIES, MAX_POOL_SIZE, MAX_SELL_RETRIES, MIN_LP_BURNED_PERCENT, MIN_POOL_SIZE, ONE_TOKEN_AT_A_TIME, USE_TRACK_LIST, PRICE_CHECK_DURATION, PRICE_CHECK_INTERVAL, PRIVATE_KEY, QUOTE_AMOUNT, QUOTE_MINT, RPC_ENDPOINT, RPC_WEBSOCKET_ENDPOINT, SELL_SLIPPAGE, STOP_LOSS, TAKE_PROFIT, TRANSACTION_EXECUTOR, TRACK_SELLING_TOKENS_ON_EXIT, TRACK_ITEMS_LIMIT, CHECK_IF_MUTABLE, CHECK_IF_SOCIALS } from "./configs";
+import { AUTO_BUY_DELAY, AUTO_SELL, AUTO_SELL_DELAY, BUY_SLIPPAGE, CHECK_IF_BURNED, CHECK_IF_FREEZABLE, CHECK_IF_MINT_IS_RENOUNCED, COMMITMENT_LEVEL, COMPUTE_UNIT_LIMIT, COMPUTE_UNIT_PRICE, CUSTOM_FEE, LOG_LEVEL, MAX_BUY_RETRIES, MAX_POOL_SIZE, MAX_SELL_RETRIES, MIN_LP_BURNED_PERCENT, MIN_POOL_SIZE, ONE_TOKEN_AT_A_TIME, USE_TRACK_LIST, PRICE_CHECK_DURATION, PRICE_CHECK_INTERVAL, PRIVATE_KEY, QUOTE_AMOUNT, QUOTE_MINT, RPC_ENDPOINT, RPC_WEBSOCKET_ENDPOINT, SELL_SLIPPAGE, STOP_LOSS, TAKE_PROFIT, TRANSACTION_EXECUTOR, TRACK_SELLING_TOKENS_ON_EXIT, TRACK_ITEMS_LIMIT, CHECK_IF_MUTABLE, CHECK_IF_SOCIALS, SELL_ANYWAY } from "./configs";
 import { getWallet, logger, sleep } from "./utils";
 import { LIQUIDITY_STATE_LAYOUT_V4, SPL_MINT_LAYOUT, TOKEN_PROGRAM_ID, Token, TokenAmount } from "@raydium-io/raydium-sdk";
 import { Bot } from "./automation/bot";
@@ -104,7 +104,7 @@ const connection = new Connection(RPC_ENDPOINT, {
   commitment: COMMITMENT_LEVEL,
 });
 
-const getTokenAccounts = async (connection: Connection, listeners: Listeners, baseMints: string[]) => {
+const getTokenAccounts = async (connection: Connection, listeners: Listeners, poolCache: PoolCache) => {
   //get accounts from wallets
   const accounts = await connection.getProgramAccounts(TOKEN_PROGRAM_ID, {
     commitment: connection.commitment,
@@ -123,7 +123,12 @@ const getTokenAccounts = async (connection: Connection, listeners: Listeners, ba
     for (let i = 0; i < accounts.length; i++) {
       const payload = accounts[i];
       const accountInfo = AccountLayout.decode(payload.account.data);
-      if (!accountInfo.mint.equals(quoteToken.mint) && baseMints.includes(accountInfo.mint.toBase58())) {
+
+      if (accountInfo.mint.equals(quoteToken.mint)) {
+        continue;
+      }
+
+      if (poolCache.has(accountInfo.mint.toBase58())) {
         listeners.emit(PREPARE_FOR_SELLING_EVENT, accountInfo);
         await sleep(500);
       }
@@ -178,10 +183,11 @@ const run = async (db: DB) => {
 
   listeners.on(PREPARE_FOR_SELLING_EVENT, async (updatedAccountInfo: KeyedAccountInfo) => {
     const accountData = AccountLayout.decode(updatedAccountInfo.accountInfo.data);
-
     if (accountData.mint.equals(quoteToken.mint)) {
       return;
     }
+
+    logger.info({ baseMint: accountData.mint.toBase58() }, "PREPARE_FOR_SELLING_EVENT")
 
     await bot.sell(updatedAccountInfo.accountId, accountData);
   });
@@ -203,7 +209,7 @@ const run = async (db: DB) => {
 
       await poolCache.load(limitedMints, db, { quoteToken });
 
-      await getTokenAccounts(connection, listeners, baseMints);
+      await getTokenAccounts(connection, listeners, poolCache);
     }
   }
 
@@ -214,22 +220,21 @@ const run = async (db: DB) => {
     const onInterrupt = async () => {
       // store current selling tokens to the trackList
       const neededTrackTokens = Object.keys(bot.sellingTokens);
+
       if (neededTrackTokens.length) {
-        const tokens = {};
+        let tokens = {};
 
         for (let i = 0; i < neededTrackTokens.length; i++) {
           const baseMint = neededTrackTokens[i];
           const marketId = bot.sellingTokens[baseMint]
 
-          Object.assign({}, tokens, {
+          tokens = Object.assign({}, tokens, {
             [baseMint]: marketId
           });
         }
 
         await db.assigns("track", tokens);
       }
-
-      await listeners.stop();
     }
 
     beforeShutdown(onInterrupt)

@@ -2,6 +2,8 @@ import { LIQUIDITY_STATE_LAYOUT_V4, LiquidityStateV4, MAINNET_PROGRAM_ID, Token 
 import { logger } from "../utils";
 import { Connection, PublicKey } from "@solana/web3.js";
 import { DB } from "../db";
+import { PoolSizeFilter } from "../automation/filters";
+import { MAX_POOL_SIZE, MIN_POOL_SIZE } from "../configs";
 
 export interface IPoolCacheItem {
   id: string;
@@ -55,7 +57,14 @@ export class PoolCache {
           // to ensure we're using the right id.
           const poolId = (await db.get<"markets">("markets", poolState.baseMint.toBase58()))?.poolId || accountInfo.pubkey.toBase58();
 
-          this.save(poolId, poolState);
+          // check if liquidity pool is enough
+          const filter = new PoolSizeFilter(this.connection, config.quoteToken, MIN_POOL_SIZE, MAX_POOL_SIZE);
+          const valid = await filter.execute(poolState);
+          if (valid) {
+            this.save(poolId, poolState);
+          } else {
+            logger.warn({ baseMint }, "Liquidity drained!!");
+          }
         }
       }
     }
@@ -71,5 +80,9 @@ export class PoolCache {
 
   public get(mint: string): IPoolCacheItem | undefined {
     return this.keys.get(mint);
+  }
+
+  public has(mint: string): boolean {
+    return this.keys.has(mint);
   }
 }

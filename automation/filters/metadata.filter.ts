@@ -29,10 +29,12 @@ export class MetadataFilter implements IFilter {
 
       if (CHECK_IF_MUTABLE) {
         const mutable = metadataAccountDataArgs.isMutable;
-        if (!mutable) {
-          logger.info(`Mutable: False`)
+        if (mutable) {
+          logger.info(`Mutable: True`)
         }
-        tests.push(mutable);
+
+        // should immutable
+        tests.push(!mutable);
       }
 
       if (CHECK_IF_SOCIALS) {
