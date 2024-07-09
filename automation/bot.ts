@@ -198,16 +198,11 @@ export class Bot {
         });
       }
 
-      await this._priceMatch(tokenAmountIn, poolKeys);
+      const matched = await this._priceMatch(tokenAmountIn, poolKeys);
 
-      // if(!matched) {
-      //   logger.info({mint: rawAccount.mint.toString()}, "can not get the target price -> Stop fetching.");
-
-      //   if(!this.config.sellAnyway) {
-      //     return;
-      //   }
-      //   logger.info({mint: rawAccount.mint.toString()}, "Sell anyway.");
-      // }
+      if(!matched) {
+        logger.warn({mint: rawAccount.mint.toString()}, "can not get the target price -> Stop fetching but sell anyway.");
+      }
 
       // trying sell even loss (to redeem rent fee)
       for (let i = 0; i < this.config.maxSellRetries; i++) {
@@ -241,7 +236,7 @@ export class Bot {
               },
               `Confirmed sell tx`,
             );
-            break;
+            return true;
           }
 
           logger.info(
@@ -263,6 +258,7 @@ export class Bot {
         this.sellExecutionCount--;
       }
     }
+    return false;
   }
 
   private async onSellCompleted(poolState: LiquidityStateV4) {
@@ -292,9 +288,9 @@ export class Bot {
     return false;
   }
 
-  private async _priceMatch(amountIn: TokenAmount, poolKeys: LiquidityPoolKeysV4) {
+  private async _priceMatch(amountIn: TokenAmount, poolKeys: LiquidityPoolKeysV4): Promise<boolean> {
     if (this.config.priceCheckDuration === 0 || this.config.priceCheckInterval === 0) {
-      return;
+      return true;
     }
 
     const timesToCheck = this.config.priceCheckDuration / this.config.priceCheckInterval;
@@ -335,7 +331,7 @@ export class Bot {
             { mint: poolKeys.baseMint.toString() },
             `Prepare a sell for Taking profit at: ${takeProfit.toFixed()} | Stop loss: ${stopLoss?.toFixed() || 0} | Current: ${amountOut.toFixed()}`,
           );
-          break;
+          return true;
         }
 
         await sleep(this.config.priceCheckInterval);
@@ -345,6 +341,8 @@ export class Bot {
         timesChecked++;
       }
     } while (timesChecked < timesToCheck);
+
+    return false;
   }
 
 

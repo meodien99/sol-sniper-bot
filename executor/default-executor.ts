@@ -20,9 +20,9 @@ export class DefaultExecutor implements IExecutor {
 
   private async _execute(tx: Transaction | VersionedTransaction): Promise<string> {
     return this.connection.sendRawTransaction(tx.serialize(), {
-      // preflightCommitment: this.connection.commitment
-      preflightCommitment: "processed",
-      skipPreflight: true
+      preflightCommitment: this.connection.commitment
+      // preflightCommitment: "processed",
+      // skipPreflight: true
     });
   }
 
