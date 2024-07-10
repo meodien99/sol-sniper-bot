@@ -1,7 +1,7 @@
 import { BlockhashWithExpiryBlockHeight, Connection, Keypair, PublicKey, SystemProgram, TransactionMessage, VersionedTransaction } from "@solana/web3.js";
 import { isProduction, logger } from "../utils";
 import { IConfirmResponse, IExecutor } from "../types/executor.types";
-import { Currency, CurrencyAmount } from "@raydium-io/raydium-sdk";
+import { Currency, CurrencyAmount } from "@raydium-io/raydium-sdk-v2";
 import { encode } from "bs58";
 import axios, { AxiosError } from "axios";
 import { JITO_TIP_ACCOUNTS_DEVNET, JITO_TIP_ACCOUNTS_MAINNET } from "../configs";
@@ -23,7 +23,7 @@ export class JitoExecutor implements IExecutor {
     return new PublicKey(tipAccount);
   }
 
-  public async execAndConfirm(tx: VersionedTransaction, payer: Keypair, lastestBlockHash: BlockhashWithExpiryBlockHeight): Promise<IConfirmResponse> {
+  public async execAndConfirm(tx: VersionedTransaction, lastestBlockHash: BlockhashWithExpiryBlockHeight, payer: Keypair): Promise<IConfirmResponse> {
     logger.info('>> Starting Jito execution...');
     // update wallet key at each execution
     this._jitoFeeWallet = this._getRandomValidatorKey();

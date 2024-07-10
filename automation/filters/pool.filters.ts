@@ -4,7 +4,7 @@ import { CHECK_IF_BURNED, CHECK_IF_FREEZABLE, CHECK_IF_MINT_IS_RENOUNCED, CHECK_
 import { MetadataFilter } from "./metadata.filter";
 import { PoolSizeFilter } from "./poolSize.filter";
 import { getMetadataAccountDataSerializer } from "@metaplex-foundation/mpl-token-metadata";
-import { LiquidityStateV4 } from "@raydium-io/raydium-sdk";
+import { LiquidityStateV4 } from "@raydium-io/raydium-sdk-v2";
 import { AuthorityFilter } from "./authority.filters";
 import { LiquidityFilter } from "./liquidity.filter";
 

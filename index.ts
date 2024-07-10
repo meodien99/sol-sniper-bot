@@ -1,17 +1,17 @@
 import { Connection, KeyedAccountInfo, Keypair } from "@solana/web3.js";
-import { AUTO_BUY_DELAY, AUTO_SELL, AUTO_SELL_DELAY, BUY_SLIPPAGE, CHECK_IF_BURNED, CHECK_IF_FREEZABLE, CHECK_IF_MINT_IS_RENOUNCED, COMMITMENT_LEVEL, COMPUTE_UNIT_LIMIT, COMPUTE_UNIT_PRICE, CUSTOM_FEE, LOG_LEVEL, MAX_BUY_RETRIES, MAX_POOL_SIZE, MAX_SELL_RETRIES, MIN_LP_BURNED_PERCENT, MIN_POOL_SIZE, ONE_TOKEN_AT_A_TIME, USE_TRACK_LIST, PRICE_CHECK_DURATION, PRICE_CHECK_INTERVAL, PRIVATE_KEY, QUOTE_AMOUNT, QUOTE_MINT, RPC_ENDPOINT, RPC_WEBSOCKET_ENDPOINT, SELL_SLIPPAGE, STOP_LOSS, TAKE_PROFIT, TRANSACTION_EXECUTOR, TRACK_SELLING_TOKENS_ON_EXIT, TRACK_ITEMS_LIMIT, CHECK_IF_MUTABLE, CHECK_IF_SOCIALS } from "./configs";
-import { getWallet, logger, sleep } from "./utils";
-import { LIQUIDITY_STATE_LAYOUT_V4, SPL_MINT_LAYOUT, TOKEN_PROGRAM_ID, Token, TokenAmount } from "@raydium-io/raydium-sdk";
+import { AUTO_BUY_DELAY, AUTO_SELL, AUTO_SELL_DELAY, BUY_SLIPPAGE, CHECK_IF_BURNED, CHECK_IF_FREEZABLE, CHECK_IF_MINT_IS_RENOUNCED, COMMITMENT_LEVEL, COMPUTE_UNIT_LIMIT, COMPUTE_UNIT_PRICE, CUSTOM_FEE, LOG_LEVEL, MAX_BUY_RETRIES, MAX_POOL_SIZE, MAX_SELL_RETRIES, MIN_LP_BURNED_PERCENT, MIN_POOL_SIZE, ONE_TOKEN_AT_A_TIME, USE_TRACK_LIST, PRICE_CHECK_DURATION, PRICE_CHECK_INTERVAL, PRIVATE_KEY, QUOTE_AMOUNT, QUOTE_MINT, RPC_ENDPOINT, RPC_WEBSOCKET_ENDPOINT, SELL_SLIPPAGE, STOP_LOSS, TAKE_PROFIT, TRANSACTION_EXECUTOR, TRACK_SELLING_TOKENS_ON_EXIT, TRACK_ITEMS_LIMIT, CHECK_IF_MUTABLE, CHECK_IF_SOCIALS, CLUSTER } from "./configs";
+import { getWallet, logger } from "./utils";
+import { LIQUIDITY_VERSION_TO_STATE_LAYOUT, LiquidityStateV4, Raydium, Token, TokenAmount, parseBigNumberish } from "@raydium-io/raydium-sdk-v2";
 import { Bot } from "./automation/bot";
 import { version } from './package.json';
 import { getToken } from "./utils/token";
 import { IBotConfig } from "./types/bot.types";
 import { AccountLayout, getAssociatedTokenAddressSync } from "@solana/spl-token";
-import { MarketCache, PoolCache } from "./caches";
+import { PoolInfoCache, PoolCache } from "./caches";
 import { DefaultExecutor, JitoExecutor } from "./executor";
 import { Listeners, POOL_SUBSCRIPTION_EVENT, PREPARE_FOR_SELLING_EVENT } from "./listeners";
-import beforeShutdown from "./utils/before-shutdown";
 import { DB } from "./db";
+import { WalletCleaner } from "./wallet-cleaner";
 
 function printDetails(wallet: Keypair, quoteToken: Token, bot: Bot) {
   logger.info(`Bot Version: ${version} `);
@@ -32,7 +32,6 @@ function printDetails(wallet: Keypair, quoteToken: Token, bot: Bot) {
     logger.info(`Compute Unit limit: ${botConfig.unitLimit}`);
     logger.info(`Compute Unit price (micro lamports): ${botConfig.unitPrice}`);
   }
-
   logger.info(`Single token at the time: ${botConfig.oneTokenAtATime}`);
   logger.info(`Use Track list: ${USE_TRACK_LIST}`);
   logger.info(`Tracked items limits: ${TRACK_ITEMS_LIMIT}`);
@@ -104,53 +103,22 @@ const connection = new Connection(RPC_ENDPOINT, {
   commitment: COMMITMENT_LEVEL,
 });
 
-const getTokenAccounts = async (connection: Connection, listeners: Listeners, poolCache: PoolCache) => {
-  //get accounts from wallets
-  const accounts = await connection.getProgramAccounts(TOKEN_PROGRAM_ID, {
-    commitment: connection.commitment,
-    filters: [
-      { dataSize: 165 },
-      {
-        memcmp: {
-          offset: 32,
-          bytes: wallet.publicKey.toBase58(),
-        }
-      }
-    ]
-  });
-
-  if (accounts.length) {
-    for (let i = 0; i < accounts.length; i++) {
-      const payload = accounts[i];
-      const accountInfo = AccountLayout.decode(payload.account.data);
-
-      if (accountInfo.mint.equals(quoteToken.mint)) {
-        continue;
-      }
-
-      if (poolCache.has(accountInfo.mint.toBase58())) {
-        listeners.emit(PREPARE_FOR_SELLING_EVENT, accountInfo);
-        await sleep(500);
-      }
-    }
-  }
-}
-
-const run = async (db: DB) => {
+const app = async (db: DB, raydium: Raydium) => {
   logger.level = LOG_LEVEL;
   logger.info('Starting bot ....');
 
-  const marketCache = new MarketCache(connection);
-  const poolCache = new PoolCache(connection);
-  let txExecutor;
+  const poolInfoCache = new PoolInfoCache(raydium);
+  const poolCache = new PoolCache();
+  const cleaner = new WalletCleaner(connection, wallet);
 
+  let txExecutor;
   if (TRANSACTION_EXECUTOR === 'jito') {
     txExecutor = new JitoExecutor(connection, CUSTOM_FEE);
   } else {
     txExecutor = new DefaultExecutor(connection)
   }
 
-  const bot = new Bot(connection, marketCache, poolCache, txExecutor, botConfig, db);
+  const bot = new Bot(connection, poolInfoCache, poolCache, raydium, txExecutor, botConfig, db);
 
   const isValid = await bot.validate();
 
@@ -158,7 +126,6 @@ const run = async (db: DB) => {
     logger.info('Bot is exiting...');
     process.exit(1);
   }
-
 
   const runTimestamp = Math.floor(new Date().getTime() / 1000);
   const listeners = new Listeners(connection);
@@ -169,81 +136,127 @@ const run = async (db: DB) => {
     autoSell: AUTO_SELL,
   });
 
-  listeners.on(POOL_SUBSCRIPTION_EVENT, async (updatedAccountInfo: KeyedAccountInfo) => {
-    const poolState = LIQUIDITY_STATE_LAYOUT_V4.decode(updatedAccountInfo.accountInfo.data);
-    const poolOpenTime = parseInt(poolState.poolOpenTime.toString());
-    const exists = poolCache.get(poolState.baseMint.toBase58());
+  // listeners.on(POOL_SUBSCRIPTION_EVENT, async (updatedAccountInfo: KeyedAccountInfo) => {
+  //   const poolId = updatedAccountInfo.accountId.toString();
+  //   const poolState = LIQUIDITY_VERSION_TO_STATE_LAYOUT[4].decode(updatedAccountInfo.accountInfo.data) as LiquidityStateV4;
 
-    if (!exists && poolOpenTime > runTimestamp) {
-      poolCache.save(updatedAccountInfo.accountId.toString(), poolState);
+  //   const poolOpenTime = parseInt(poolState.poolOpenTime.toString());
+  //   const baseMint = poolState.baseMint.toBase58();
+  //   const exists = poolCache.get(baseMint);
+  //   if (!exists && poolOpenTime > runTimestamp) {
+  //     poolCache.save(baseMint, {
+  //       marketId: poolState.marketId.toBase58(),
+  //       baseDecimal: poolState.baseDecimal.toNumber(),
+  //       poolId,
+  //       baseMint
+  //     });
 
-      await bot.buy(updatedAccountInfo.accountId, poolState);
-    }
-  });
+  //     await bot.buy(poolId, poolState);
+  //   }
+  // });
+  
+  // listeners.on(PREPARE_FOR_SELLING_EVENT, async (updatedAccountInfo: KeyedAccountInfo) => {
+  //   const accountData = AccountLayout.decode(updatedAccountInfo.accountInfo.data);
+  //   if (accountData.mint.equals(quoteToken.mint)) {
+  //     return;
+  //   }
 
-  listeners.on(PREPARE_FOR_SELLING_EVENT, async (updatedAccountInfo: KeyedAccountInfo) => {
-    const accountData = AccountLayout.decode(updatedAccountInfo.accountInfo.data);
-    if (accountData.mint.equals(quoteToken.mint)) {
-      return;
-    }
+  //   const amountIn = parseBigNumberish(accountData.amount)
+  //   if (amountIn.isZero()) {
+  //     cleaner.add(updatedAccountInfo.accountId.toBase58());
+  //     return;
+  //   }
 
-    logger.info({ baseMint: accountData.mint.toBase58() }, "PREPARE_FOR_SELLING_EVENT")
+  //   logger.info({ baseMint: accountData.mint.toBase58() }, "PREPARE_FOR_SELLING")
 
-    await bot.sell(updatedAccountInfo.accountId, accountData);
-  });
+  //   // const ataIn = updatedAccountInfo.accountId;
+  //   await bot.sell(accountData);
+  // });
 
-  if (USE_TRACK_LIST) {
-    // init all caches for later use.
-    let trackLists = await db.getCollection<"track">("track");
+  cleaner.add("HLcy5rY786SzgDojGRvD5HW7qGHDKnKehsBeBsCd2nKn");
+  cleaner.add("BnCjGxn4UAMzL6Yhg4aNLubYeqaPAgLS768gyujkBxxJ");
+  // if (USE_TRACK_LIST) {
+  //   // init all caches for later use.
+  //   let trackLists = await db.getCollection<"track">("track");
 
-    if (trackLists) {
-      const baseMints = Object.keys(trackLists).slice(0, TRACK_ITEMS_LIMIT);
+  //   if (trackLists) {
+  //     const baseMints = Object.keys(trackLists).slice(0, TRACK_ITEMS_LIMIT);
 
-      const markets = baseMints.map((baseMint) => (trackLists[baseMint]));
-      await marketCache.load(markets);
+  //     const markets = baseMints.map((baseMint) => (trackLists[baseMint]));
+  //     await marketCache.load(markets);
 
-      const limitedMints = baseMints.map((baseMint) => ({
-        baseMint,
-        marketId: trackLists[baseMint]
-      }));
+  //     const limitedMints = baseMints.map((baseMint) => ({
+  //       baseMint,
+  //       marketId: trackLists[baseMint]
+  //     }));
 
-      await poolCache.load(limitedMints, db, { quoteToken });
+  //     await poolCache.load(limitedMints, db, { quoteToken });
 
-      await getTokenAccounts(connection, listeners, poolCache);
-    }
-  }
+  //     await getTokenAccounts(connection, listeners, poolCache);
+  //   }
+  // }
 
   printDetails(wallet, quoteToken, bot);
 
-  // register trapping before shuting down
-  if (USE_TRACK_LIST && TRACK_SELLING_TOKENS_ON_EXIT) {
-    const onInterrupt = async () => {
-      // store current selling tokens to the trackList
-      const neededTrackTokens = Object.keys(bot.sellingTokens);
+  // // register trapping before shuting down
+  // if (USE_TRACK_LIST && TRACK_SELLING_TOKENS_ON_EXIT) {
+  //   const onInterrupt = async () => {
+  //     // store current selling tokens to the trackList
+  //     const neededTrackTokens = Object.keys(bot.sellingTokens);
 
-      if (neededTrackTokens.length) {
-        let tokens = {};
+  //     if (neededTrackTokens.length) {
+  //       let tokens = {};
 
-        for (let i = 0; i < neededTrackTokens.length; i++) {
-          const baseMint = neededTrackTokens[i];
-          const marketId = bot.sellingTokens[baseMint]
+  //       for (let i = 0; i < neededTrackTokens.length; i++) {
+  //         const baseMint = neededTrackTokens[i];
+  //         const marketId = bot.sellingTokens[baseMint]
 
-          tokens = Object.assign({}, tokens, {
-            [baseMint]: marketId
-          });
-        }
+  //         tokens = Object.assign({}, tokens, {
+  //           [baseMint]: marketId
+  //         });
+  //       }
 
-        await db.assigns("track", tokens);
-      }
-    }
+  //       await db.assigns("track", tokens);
+  //     }
+  //   }
 
-    beforeShutdown(onInterrupt)
-  }
+  //   beforeShutdown(onInterrupt)
+  // }
 }
 
 // init db
 const db = new DB('store/db.json');
 
-db.on('ready', () => {
-  run(db);
+
+async function initRaydiumSDK(params: { loadTokens: boolean }): Promise<Raydium> {
+  console.log(`[Raydium] connect to rpc ${connection.rpcEndpoint} in ${CLUSTER}`);
+  const raydium = await Raydium.load({
+    owner: wallet,
+    connection,
+    cluster: CLUSTER,
+    disableFeatureCheck: true,
+    disableLoadToken: !params.loadTokens,
+    blockhashCommitment: COMMITMENT_LEVEL
+  });
+
+  return raydium;
+  /**
+   * By default: sdk will automatically fetch token account data when need it or any sol balace changed.
+   * if you want to handle token account by yourself, set token account data after init sdk
+   * code below shows how to do it.
+   * note: after call raydium.account.updateTokenAccount, raydium will not automatically fetch token account
+   */
+
+  /*  
+  raydium.account.updateTokenAccount(await fetchTokenAccountData())
+  connection.onAccountChange(owner.publicKey, async () => {
+    raydium!.account.updateTokenAccount(await fetchTokenAccountData())
+  })
+  */
+}
+
+db.on('ready', async () => {
+  const raydium = await initRaydiumSDK({ loadTokens: false });
+
+  await app(db, raydium);
 });

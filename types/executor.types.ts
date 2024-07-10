@@ -8,8 +8,8 @@ export interface IConfirmResponse {
 
 export interface IExecutor {
   execAndConfirm(
-    tx: VersionedTransaction,
-    payer: Keypair,
-    lastestBlockHash: BlockhashWithExpiryBlockHeight
+    tx: VersionedTransaction | string,
+    lastestBlockHash: BlockhashWithExpiryBlockHeight,
+    payer?: Keypair,
   ): Promise<IConfirmResponse>
 };

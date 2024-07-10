@@ -1,6 +1,6 @@
 import { Connection } from "@solana/web3.js";
 import { IFilter } from "../../types/filter.types";
-import { LiquidityStateV4 } from "@raydium-io/raydium-sdk";
+import { LiquidityStateV4 } from "@raydium-io/raydium-sdk-v2";
 import { logger } from "../../utils";
 import { CHECK_IF_FREEZABLE, CHECK_IF_MINT_IS_RENOUNCED } from "../../configs";
 import { MintLayout, RawMint } from "@solana/spl-token";

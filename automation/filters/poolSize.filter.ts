@@ -1,6 +1,6 @@
 import { Connection } from "@solana/web3.js";
 import { IFilter } from "../../types/filter.types";
-import { LiquidityStateV4, Token, TokenAmount } from "@raydium-io/raydium-sdk";
+import { LiquidityStateV4, Token, TokenAmount } from "@raydium-io/raydium-sdk-v2";
 import { logger } from "../../utils";
 
 export class PoolSizeFilter implements IFilter {

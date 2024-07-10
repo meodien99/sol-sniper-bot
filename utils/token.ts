@@ -1,4 +1,4 @@
-import { Token } from "@raydium-io/raydium-sdk";
+import { Token } from "@raydium-io/raydium-sdk-v2";
 
 export const getToken = (token: string): Token => {
   switch (token) {

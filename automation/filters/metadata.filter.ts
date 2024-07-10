@@ -1,7 +1,7 @@
 import { Connection } from "@solana/web3.js";
 import { IFilter } from "../../types/filter.types";
 import { MetadataAccountDataArgs } from "@metaplex-foundation/mpl-token-metadata";
-import { LiquidityState, getPdaMetadataKey } from "@raydium-io/raydium-sdk";
+import { LiquidityState, getPdaMetadataKey } from "@raydium-io/raydium-sdk-v2";
 import { Serializer } from '@metaplex-foundation/umi/serializers';
 import { logger } from "../../utils";
 import { CHECK_IF_MUTABLE, CHECK_IF_SOCIALS } from "../../configs";

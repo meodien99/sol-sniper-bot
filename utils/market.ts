@@ -1,4 +1,4 @@
-import { GetStructureSchema, MARKET_STATE_LAYOUT_V3, publicKey, struct } from "@raydium-io/raydium-sdk";
+import { GetStructureSchema, MARKET_STATE_LAYOUT_V3, publicKey, struct } from "@raydium-io/raydium-sdk-v2";
 import { Commitment, Connection, PublicKey } from "@solana/web3.js";
 
 export const MINIMAL_MARKET_STATE_LAYOUT_V3 = struct([

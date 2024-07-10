@@ -1,4 +1,4 @@
-import { Token, TokenAmount } from "@raydium-io/raydium-sdk";
+import { Token, TokenAmount } from "@raydium-io/raydium-sdk-v2";
 import { Keypair, PublicKey } from "@solana/web3.js";
 
 export interface IBotConfig {

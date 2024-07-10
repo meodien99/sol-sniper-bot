@@ -1,9 +1,9 @@
-import { LIQUIDITY_STATE_LAYOUT_V4, LiquidityPoolStatus, MAINNET_PROGRAM_ID, MARKET_STATE_LAYOUT_V3, SPL_ACCOUNT_LAYOUT, SPL_MINT_LAYOUT, Token } from "@raydium-io/raydium-sdk";
+import { AMM_V4, LIQUIDITY_VERSION_TO_STATE_LAYOUT, OPEN_BOOK_PROGRAM, Token } from "@raydium-io/raydium-sdk-v2";
 import { Connection, GetProgramAccountsFilter, ProgramAccountChangeCallback, PublicKey } from "@solana/web3.js";
 import EventEmitter from "events";
 import { POOL_SUBSCRIPTION_EVENT, PREPARE_FOR_SELLING_EVENT } from "./listeners.events";
 import { TOKEN_PROGRAM_ID } from "@solana/spl-token";
-import { poolStatusToBytes } from "../utils/pool";
+import { LiquidityPoolStatus, poolStatusToBytes } from "../utils/pool";
 
 export interface IListenersStartConfig {
   walletPublicKey: PublicKey;
@@ -64,30 +64,31 @@ export class Listeners extends EventEmitter {
       this.emit(POOL_SUBSCRIPTION_EVENT, updatedAccountInfo)
     };
    
+    
     const filters: GetProgramAccountsFilter[] = [
-      { dataSize: LIQUIDITY_STATE_LAYOUT_V4.span },
+      { dataSize: LIQUIDITY_VERSION_TO_STATE_LAYOUT[4].span },
       {
         memcmp: {
-          offset: LIQUIDITY_STATE_LAYOUT_V4.offsetOf('quoteMint'),
+          offset: LIQUIDITY_VERSION_TO_STATE_LAYOUT[4].offsetOf('quoteMint'),
           bytes: config.quoteToken.mint.toBase58(),
         }
       },
       {
         memcmp: {
-          offset: LIQUIDITY_STATE_LAYOUT_V4.offsetOf('marketProgramId'),
-          bytes: MAINNET_PROGRAM_ID.OPENBOOK_MARKET.toBase58(),
+          offset: LIQUIDITY_VERSION_TO_STATE_LAYOUT[4].offsetOf('marketProgramId'),
+          bytes: OPEN_BOOK_PROGRAM.toBase58(),
         }
       },
       {
         memcmp: {
-          offset: LIQUIDITY_STATE_LAYOUT_V4.offsetOf('status'),
+          offset: LIQUIDITY_VERSION_TO_STATE_LAYOUT[4].offsetOf('status'),
           bytes: poolStatusToBytes(LiquidityPoolStatus.Swap),
         },
       },
     ];
 
     return this.connection.onProgramAccountChange(
-      MAINNET_PROGRAM_ID.AmmV4,
+      AMM_V4,
       callback,
       this.connection.commitment,
       filters
