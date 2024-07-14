@@ -1,6 +1,6 @@
 # Intro
 
-This bot allows you to automate your crypto trading strategies on the Solana blockchain. The bot is currently written in JS and uses the Raydium V2 SDK to execute trades.
+This bot allows you to automate your crypto trading strategies on the Solana blockchain. The bot is currently written in JS and uses the [Raydium V2 SDK](https://github.com/raydium-io/raydium-sdk-V2) to execute trades.
 Basic logics here is listen new pool created in Raydium AMM and if that token matches the filter sets based on the predefined parameters, it executes strategies set by the user.
 Simply the bot will periodity calculate the price and if it hits TP/SL or the `PRICE_CHECK_DURATION` timedout - bot will sell the token 
 (Because there are many rugged pull here, it's better to sell tokens before the liquidity is too low, when the `amoutOut` is too small you can not sell that token anymore, or can't redeem the rental fee `0.002 SOL` by default);
