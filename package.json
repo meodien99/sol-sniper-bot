@@ -3,8 +3,7 @@
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
-    "dev": "ts-node index.ts",
-    "test": "ts-node caches/poolInfo.cache.ts"
+    "start": "ts-node index.ts"
   },
   "author": "",
   "license": "MIT",
