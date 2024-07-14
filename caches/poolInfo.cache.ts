@@ -1,4 +1,4 @@
-import { logger } from "../utils";
+import { logger, sleep } from "../utils";
 import { PoolInfoCacheItem } from "./cache.types";
 import { Raydium, toAmmComputePoolInfo } from "@raydium-io/raydium-sdk-v2";
 
@@ -33,6 +33,7 @@ export class PoolInfoCache {
   //       const data = poolInfos[i];
   //       if (data) {
   //         console.log('[poolcahce] get new poolInfo', data);
+  //         // @ts-ignore
   //         this.save(data.id, data);
   //       }
   //     }
@@ -50,8 +51,6 @@ export class PoolInfoCache {
       this.save(poolId, data);
 
       return data;
-    } else {
-      logger.error('vcl sao k co info');
     }
 
     return undefined;

@@ -18,23 +18,3 @@ export function poolStatusToBytes(status: LiquidityPoolStatus): string {
 
   return bs58.encode(Array.from(new Uint8Array(buffer)));
 }
-
-export async function getPoolKeys(
-  raydium: Raydium,
-  rpcData: AmmRpcData,
-  poolInfo: ComputeAmountOutParam["poolInfo"],
-): Promise<AmmV4Keys> {
-  const keys = await raydium.tradeV2.computePoolToPoolKeys({
-    pools: [poolInfo],
-    ammRpcData: { [poolInfo.id]: rpcData },
-  });
-
-  return keys[0] as AmmV4Keys;
-}
-
-export async function getRpcPoolInfo(
-  raydium: Raydium,
-  poolId: string,
-): Promise<AmmRpcData> {
-  return await raydium.liquidity.getRpcPoolInfo(poolId)
-}
