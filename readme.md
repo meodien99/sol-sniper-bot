@@ -22,6 +22,7 @@ To run the script you need to:
 - Convert some SOL to WSOL (via Jupiter or Raydium).
 - Install dependencies by typing: `npm install`
 - Run the script by typing: `npm run start` in terminal
+- Updating `.env`, Use contents template inside the `.env.example`. (Check [Configuration](#configuration) section bellow).
 
 ### Configuration
 
