@@ -5,6 +5,9 @@ Basic logics here is listen new pool created in Raydium AMM and if that token ma
 Simply the bot will periodity calculate the price and if it hits TP/SL or the `PRICE_CHECK_DURATION` timedout - bot will sell the token 
 (Because there are many rugged pull here, it's better to sell tokens before the liquidity is too low, when the `amoutOut` is too small you can not sell that token anymore, or can't redeem the rental fee `0.002 SOL` by default);
 
+## NO REFERAL FEE
+>❗❗This code doesn't include or require your fee per transaction. Feel free to use as your own.
+
 ## Disclaimer
 > 🛑 This bot can lead to loss of your funds, use at your own risk. Start with small amounts and protect your keys.
 - This Bot is provided as is, for learning purposes.
